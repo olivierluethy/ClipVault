@@ -176,7 +176,7 @@ mod tests {
                 assert!(cols.contains(&c.to_string()), "missing column {c}");
             }
         }
-        // Reopen: must not error (idempotent) and stay at v3.
+        // Reopen: must not error (idempotent) and stay at v4.
         drop(s);
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()

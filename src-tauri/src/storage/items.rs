@@ -227,6 +227,12 @@ impl Storage {
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
         conn.execute("DELETE FROM items WHERE deleted_at IS NOT NULL", [])?;
+        // Drop any folder memberships whose item no longer exists, so purging a
+        // soft-deleted folder member never leaves an orphaned item_folders row.
+        conn.execute(
+            "DELETE FROM item_folders WHERE item_id NOT IN (SELECT id FROM items)",
+            [],
+        )?;
         Ok(files)
     }
 }
