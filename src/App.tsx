@@ -42,6 +42,7 @@ import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
+import { SearchIcon, PlusIcon, SlidersIcon } from "./components/Icon";
 
 export default function App() {
   const [folder, setFolder] = useState("all");
@@ -486,52 +487,58 @@ export default function App() {
         onDeleteFolder={handleDeleteFolder}
       />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <header className="flex items-center gap-4 p-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2 shrink-0">
-            <Logo className="w-6 h-6 text-accent" />
-            <h1 className="text-lg font-semibold">ClipVault</h1>
+        <header className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 shrink-0">
+          <div className="mr-1 flex items-center gap-2 shrink-0">
+            <Logo className="h-6 w-6 text-accent" />
+            <h1 className="text-[15px] font-semibold tracking-tight">ClipVault</h1>
           </div>
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.currentTarget.blur();
-                clearSearch();
-              }
-            }}
-            placeholder="Search…"
-            className="flex-1 min-w-0 px-3 py-1 rounded border border-border bg-bg-raised text-fg text-sm placeholder:text-fg-muted focus:outline-none focus:border-accent"
-          />
-          <DateFilter
-            active={dateRange}
-            onApply={applyDateRange}
-            onClear={() => setDateRange(null)}
-          />
+          <div className="relative flex-1 min-w-0">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.currentTarget.blur();
+                  clearSearch();
+                }
+              }}
+              placeholder="Search clipboard…"
+              className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+            />
+          </div>
+          <DateFilter active={dateRange} onApply={applyDateRange} onClear={() => setDateRange(null)} />
           <button
             onClick={doQuickAdd}
             title="Save the current clipboard now (works even in Privacy mode)"
-            className="px-3 py-1 rounded border border-border text-sm shrink-0 text-fg-muted hover:text-fg hover:border-accent"
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm text-fg-muted hover:border-border-strong hover:text-fg"
           >
-            + Add current
+            <PlusIcon className="h-4 w-4" />
+            <span>Add</span>
           </button>
           <button
             onClick={toggle}
-            className={`px-3 py-1 rounded border border-border text-sm shrink-0 ${
-              privacy ? "bg-accent-dim text-fg" : "text-fg-muted"
+            title={privacy ? "Privacy mode on — capture paused" : "Privacy mode off — capturing"}
+            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
+              privacy
+                ? "border-accent/50 bg-accent-dim text-fg"
+                : "border-border text-fg-muted hover:border-border-strong hover:text-fg"
             }`}
           >
-            {privacy ? "Privacy: ON" : "Privacy: OFF"}
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${privacy ? "bg-accent" : "bg-fg-faint"}`}
+            />
+            Privacy
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
             title="Settings"
             aria-label="Settings"
-            className="px-2 py-1 rounded border border-border text-sm shrink-0 text-fg-muted hover:text-fg hover:border-accent"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border text-fg-muted hover:border-border-strong hover:text-fg"
           >
-            ⚙
+            <SlidersIcon className="h-4 w-4" />
           </button>
         </header>
 
@@ -568,15 +575,15 @@ export default function App() {
         )}
 
         {!isSearching && pinned.length > 0 && (
-          <section className="p-4 border-b border-border space-y-2 shrink-0">
-            <div className="text-xs uppercase text-fg-muted">Pinned</div>
+          <section className="space-y-1.5 border-b border-border px-3 py-3 shrink-0">
+            <div className="px-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+              Pinned
+            </div>
             {pinned.map((it, i) => (
               <div key={it.id} className="relative">
-                {copied === it.id && (
-                  <span className="absolute right-2 top-2 text-xs text-accent z-10">Copied ✓</span>
-                )}
                 <Card
                   item={it}
+                  copied={copied === it.id}
                   selected={sel === i}
                   multiSelected={selectedIds.has(it.id)}
                   editing={editingId === it.id}
@@ -613,7 +620,7 @@ export default function App() {
           </section>
         )}
 
-        <div ref={parentRef} className="flex-1 overflow-auto p-4 min-h-0">
+        <div ref={parentRef} className="flex-1 overflow-auto px-3 py-3 min-h-0">
           {isEmpty && (
             <p className="text-fg-muted">
               {isSearching
@@ -659,12 +666,10 @@ export default function App() {
                       <span className="text-xs uppercase text-fg-muted">{row.label}</span>
                     </div>
                   ) : (
-                    <div className="relative pb-2">
-                      {copied === row.item.id && (
-                        <span className="absolute right-2 top-2 text-xs text-accent z-10">Copied ✓</span>
-                      )}
+                    <div className="relative pb-1.5">
                       <Card
                         item={row.item}
+                        copied={copied === row.item.id}
                         selected={flatIndex >= 0 && sel === flatIndex}
                         multiSelected={selectedIds.has(row.item.id)}
                         editing={editingId === row.item.id}

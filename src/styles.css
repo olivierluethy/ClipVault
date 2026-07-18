@@ -9,7 +9,39 @@ body,
 }
 
 body {
-  @apply bg-bg text-fg;
+  @apply bg-bg text-fg font-sans antialiased;
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Quiet, thin scrollbars that fit the dark surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #33333d transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #2c2c35;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #3a3a46;
+}
+
+/* Tabular, aligned numerals for the monospace metadata (counts, times). */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }
