@@ -11,6 +11,7 @@ export type Item = {
   pinned: boolean;
   created_at: number;
   updated_at: number;
+  metadata: string | null;
 };
 
 export const listItems = (limit = 100, beforeCreatedAt?: number, beforeId?: string) =>
@@ -29,6 +30,8 @@ export const listByType = (typeStr: string, limit = 100, beforeCreatedAt?: numbe
   });
 export const folderCounts = () => invoke<[string, number][]>("folder_counts");
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
+export const copyItemClean = (id: string) => invoke<void>("copy_item_clean", { id });
+export const copyItemPlain = (id: string) => invoke<void>("copy_item_plain", { id });
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 export const restoreItem = (id: string) => invoke<void>("restore_item", { id });
 export const setPinned = (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned });

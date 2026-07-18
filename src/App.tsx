@@ -3,6 +3,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Item,
   copyItem,
+  copyItemClean,
+  copyItemPlain,
   deleteItem,
   restoreItem,
   setPinned,
@@ -167,6 +169,18 @@ export default function App() {
 
   const copy = useCallback(async (it: Item) => {
     await copyItem(it.id);
+    setCopied(it.id);
+    setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
+  }, []);
+
+  const cleanCopy = useCallback(async (it: Item) => {
+    await copyItemClean(it.id);
+    setCopied(it.id);
+    setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
+  }, []);
+
+  const plainCopy = useCallback(async (it: Item) => {
+    await copyItemPlain(it.id);
     setCopied(it.id);
     setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
   }, []);
@@ -426,6 +440,14 @@ export default function App() {
                     setSel(i);
                     copy(it);
                   }}
+                  onCleanCopy={() => {
+                    setSel(i);
+                    cleanCopy(it);
+                  }}
+                  onPlainCopy={() => {
+                    setSel(i);
+                    plainCopy(it);
+                  }}
                   onDelete={() => del(it)}
                   onPin={() => pin(it)}
                   onZoom={() => setZoom(it)}
@@ -483,6 +505,8 @@ export default function App() {
                         onCreateAndAssign={(name) => createAndAssign(row.item, name)}
                         onBodyClick={(e) => onBodyClick(row.item, flatIndex, e)}
                         onCopy={() => copy(row.item)}
+                        onCleanCopy={() => cleanCopy(row.item)}
+                        onPlainCopy={() => plainCopy(row.item)}
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
                         onZoom={() => setZoom(row.item)}

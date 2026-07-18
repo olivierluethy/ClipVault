@@ -100,6 +100,71 @@ function FolderMenu(props: {
   );
 }
 
+type LinkMetadata = { title?: string; favicon_url?: string };
+
+function parseLinkMetadata(metadata: string | null): LinkMetadata | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata);
+    if (parsed && typeof parsed === "object") return parsed as LinkMetadata;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function CopyMenu(props: {
+  onClose: () => void;
+  onCleanCopy: () => void;
+  onPlainCopy: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        props.onClose();
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.onClose();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [props.onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-full mt-1 z-20 w-44 rounded border border-border bg-bg-raised shadow-lg p-1"
+    >
+      <button
+        onClick={() => {
+          props.onCleanCopy();
+          props.onClose();
+        }}
+        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-card text-left"
+      >
+        Clean copy
+      </button>
+      <button
+        onClick={() => {
+          props.onPlainCopy();
+          props.onClose();
+        }}
+        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-card text-left"
+      >
+        Copy as plain text
+      </button>
+    </div>
+  );
+}
+
 export function Card(props: {
   item: Item;
   selected: boolean;
@@ -111,6 +176,8 @@ export function Card(props: {
   onCreateAndAssign: (name: string) => void;
   onBodyClick: (e: React.MouseEvent) => void;
   onCopy: () => void;
+  onCleanCopy: () => void;
+  onPlainCopy: () => void;
   onDelete: () => void;
   onPin: () => void;
   onZoom: () => void;
@@ -128,6 +195,8 @@ export function Card(props: {
   const [draft, setDraft] = useState(item.content ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const linkMeta = item.item_type === "link" ? parseLinkMetadata(item.metadata) : null;
 
   useEffect(() => {
     if (editing) {
@@ -189,7 +258,26 @@ export function Card(props: {
           {item.content}
         </span>
       ) : item.item_type === "link" ? (
-        <span className="truncate text-sm flex-1 text-accent">{item.content}</span>
+        <span className="flex items-center gap-2 truncate text-sm flex-1 min-w-0">
+          {linkMeta?.favicon_url && (
+            <img
+              src={linkMeta.favicon_url}
+              alt=""
+              className="w-4 h-4 shrink-0 rounded-sm"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+            />
+          )}
+          {linkMeta?.title ? (
+            <span className="flex flex-col min-w-0 flex-1">
+              <span className="truncate text-fg">{linkMeta.title}</span>
+              <span className="truncate text-xs text-fg-muted">{item.content}</span>
+            </span>
+          ) : (
+            <span className="truncate text-accent flex-1">{item.content}</span>
+          )}
+        </span>
       ) : item.item_type === "text" || item.item_type === "number" ? (
         <span className="truncate text-sm flex-1">{item.content}</span>
       ) : thumb ? (
@@ -221,6 +309,28 @@ export function Card(props: {
             <span aria-hidden>⧉</span>
             <span>Copy</span>
           </button>
+          <div className="relative">
+            <button
+              title="More copy options"
+              aria-label="More copy options"
+              aria-haspopup="true"
+              aria-expanded={copyMenuOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCopyMenuOpen((v) => !v);
+              }}
+              className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${copyMenuOpen ? "text-accent" : "text-fg-muted"}`}
+            >
+              ⋯
+            </button>
+            {copyMenuOpen && (
+              <CopyMenu
+                onCleanCopy={props.onCleanCopy}
+                onPlainCopy={props.onPlainCopy}
+                onClose={() => setCopyMenuOpen(false)}
+              />
+            )}
+          </div>
           <button
             title={item.pinned ? "Unpin" : "Pin"}
             aria-label={item.pinned ? "Unpin" : "Pin"}
