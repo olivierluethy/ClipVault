@@ -150,3 +150,14 @@ pub fn set_privacy(
     let _ = privacy_menu.0.set_checked(on);
     Ok(())
 }
+
+#[tauri::command]
+pub fn get_exclude_secrets(state: State<AppState>) -> bool {
+    state.exclude_secrets.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+pub fn set_exclude_secrets(state: State<AppState>, on: bool) -> Result<(), String> {
+    state.exclude_secrets.store(on, Ordering::Relaxed);
+    state.storage.set_bool("exclude_secrets", on).map_err(|e| e.to_string())
+}

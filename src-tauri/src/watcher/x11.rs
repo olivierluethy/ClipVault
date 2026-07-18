@@ -40,7 +40,7 @@ impl X11Backend {
 }
 
 impl ClipboardBackend for X11Backend {
-    fn run(self: Box<Self>, tx: Sender<ClipEvent>, privacy: Arc<AtomicBool>) {
+    fn run(self: Box<Self>, tx: Sender<ClipEvent>, privacy: Arc<AtomicBool>, exclude_secrets: Arc<AtomicBool>) {
         let selection = self.clipboard.getter.atoms.clipboard;
         let property = self.clipboard.getter.atoms.property;
         let utf8 = self.clipboard.getter.atoms.utf8_string;
@@ -50,6 +50,11 @@ impl ClipboardBackend for X11Backend {
             .into_iter()
             .filter_map(|m| self.atom(m).ok().map(|a| (m, a)))
             .collect();
+
+        // Password managers (KeePassXC, KWallet/Klipper, ...) mark a "secret"
+        // clipboard offering with this X11 target. Intern it once up front;
+        // probed per-change (both text and image branches) below.
+        let secret_hint = self.atom("x-kde-passwordManagerHint").ok();
 
         let mut consecutive_failures: u32 = 0;
 
@@ -92,6 +97,19 @@ impl ClipboardBackend for X11Backend {
 
             if privacy.load(Ordering::Relaxed) {
                 continue; // paused: consume the change signal, store nothing
+            }
+
+            if exclude_secrets.load(Ordering::Relaxed) {
+                if let Some(hint) = secret_hint {
+                    if let Ok(v) = self.clipboard.load(selection, hint, property, Duration::from_millis(200)) {
+                        if !v.is_empty() {
+                            // Concealed/secret content (value is typically "secret"),
+                            // as set by password managers (KeePassXC, KWallet/Klipper,
+                            // ...) — do not capture, for either the text or image path.
+                            continue;
+                        }
+                    }
+                }
             }
 
             if !text.is_empty() {

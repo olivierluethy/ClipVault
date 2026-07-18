@@ -6,6 +6,10 @@ use crate::storage::Storage;
 pub struct AppState {
     pub storage: Arc<Storage>,
     pub privacy: Arc<AtomicBool>,
+    /// When true (default), clipboard entries the owner marks with the
+    /// `x-kde-passwordManagerHint` X11 target (set by password managers such as
+    /// KeePassXC / KWallet) are never captured. Toggleable via IPC.
+    pub exclude_secrets: Arc<AtomicBool>,
     /// Content hash of the last item the app itself copied to the clipboard (one-shot).
     /// Consulted by `capture::process_event` to suppress re-capturing the app's own copy-back.
     /// Set by the `copy_item` IPC command before it writes to the clipboard; the consumer

@@ -59,12 +59,14 @@ pub fn run() {
 
             let privacy_init = storage.get_bool("privacy_mode", false);
             let privacy = Arc::new(AtomicBool::new(privacy_init));
+            let exclude_secrets = Arc::new(AtomicBool::new(storage.get_bool("exclude_secrets", true)));
             let last_self_copy: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
             let writer = crate::clipboard_writer::spawn();
 
             app.manage(crate::state::AppState {
                 storage: storage.clone(),
                 privacy: privacy.clone(),
+                exclude_secrets: exclude_secrets.clone(),
                 last_self_copy: last_self_copy.clone(),
                 writer,
             });
@@ -85,6 +87,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let (tx, rx) = std::sync::mpsc::channel::<crate::watcher::ClipEvent>();
             let privacy_w = privacy.clone();
+            let exclude_secrets_w = exclude_secrets.clone();
             std::thread::spawn(move || {
                 loop {
                     match crate::watcher::x11::X11Backend::new() {
@@ -92,7 +95,7 @@ pub fn run() {
                             use crate::watcher::ClipboardBackend;
                             // run() blocks; returns only on persistent failure (its internal
                             // backoff prevents busy-looping while it's failing).
-                            Box::new(backend).run(tx.clone(), privacy_w.clone());
+                            Box::new(backend).run(tx.clone(), privacy_w.clone(), exclude_secrets_w.clone());
                         }
                         Err(e) => eprintln!("clipvault: clipboard backend unavailable: {e}"),
                     }
@@ -189,6 +192,8 @@ pub fn run() {
             crate::ipc::search,
             crate::ipc::get_privacy,
             crate::ipc::set_privacy,
+            crate::ipc::get_exclude_secrets,
+            crate::ipc::set_exclude_secrets,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");
