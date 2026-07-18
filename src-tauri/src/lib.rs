@@ -19,6 +19,12 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+        })
         .setup(|app| {
             // Data dir: ~/.local/share/clipvault/ (NOT the identifier-based app_data_dir()).
             let data_dir = app.path().data_dir()?.join("clipvault");
@@ -54,6 +60,33 @@ pub fn run() {
                     }
                 }
             });
+
+            // Tray icon with Open / Toggle Privacy Mode / Quit menu.
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::TrayIconBuilder;
+
+            let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+            let priv_i = MenuItem::with_id(app, "privacy", "Toggle Privacy Mode", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&open_i, &priv_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .tooltip("ClipVault")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "open" => { if let Some(w) = app.get_webview_window("main") { let _ = w.show(); let _ = w.set_focus(); } }
+                    "quit" => { app.exit(0); }
+                    "privacy" => {
+                        let state = app.state::<crate::state::AppState>();
+                        let now = !state.privacy.load(std::sync::atomic::Ordering::Relaxed);
+                        state.privacy.store(now, std::sync::atomic::Ordering::Relaxed);
+                        let _ = state.storage.set_bool("privacy_mode", now);
+                        let _ = app.emit("privacy-changed", now);
+                    }
+                    _ => {}
+                })
+                .build(app)?;
 
             Ok(())
         })
