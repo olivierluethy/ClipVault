@@ -55,6 +55,11 @@ pub fn folder_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, Strin
 }
 
 #[tauri::command]
+pub fn item_day_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
+    state.storage.item_day_counts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn set_pinned(state: State<AppState>, id: String, pinned: bool) -> Result<(), String> {
     state.storage.set_pinned(&id, pinned).map_err(|e| e.to_string())
 }

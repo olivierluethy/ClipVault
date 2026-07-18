@@ -44,6 +44,8 @@ export const listItemsRange = (
     beforeId: beforeId ?? null,
   });
 export const folderCounts = () => invoke<[string, number][]>("folder_counts");
+/** Distinct local days ("YYYY-MM-DD") that contain items, with counts. */
+export const itemDayCounts = () => invoke<[string, number][]>("item_day_counts");
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
 export const copyItemClean = (id: string) => invoke<void>("copy_item_clean", { id });
 export const copyItemPlain = (id: string) => invoke<void>("copy_item_plain", { id });

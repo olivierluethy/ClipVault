@@ -197,6 +197,21 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Distinct local calendar days that contain at least one live item, with counts,
+    /// as `("YYYY-MM-DD", n)`. Powers the date-picker's populated-day highlighting.
+    pub fn item_day_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*)
+             FROM items WHERE deleted_at IS NULL
+             GROUP BY day",
+        )?;
+        let rows: Vec<(String, i64)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     pub fn folder_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
