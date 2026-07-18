@@ -30,6 +30,11 @@ const MAX_BODY_BYTES: usize = 262_144; // 256 KiB
 /// be produced.
 pub fn fetch(url: &str) -> Option<LinkMeta> {
     let parsed = reqwest::Url::parse(url).ok()?;
+    // Only ever fetch http(s) — never file:// or other schemes (defense in depth;
+    // don't rely on the HTTP client to reject them).
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
     let favicon_url = parsed
         .host_str()
         .map(|host| format!("{}://{}/favicon.ico", parsed.scheme(), host));
@@ -135,5 +140,20 @@ mod tests {
     fn trims_surrounding_whitespace() {
         let html = "<title>\n  Padded Title  \n</title>";
         assert_eq!(parse_title(html), Some("Padded Title".to_string()));
+    }
+
+    #[test]
+    fn unclosed_title_returns_none_without_panic() {
+        assert_eq!(parse_title("<title>Foo with no closing tag"), None);
+        assert_eq!(parse_title("<title"), None);
+        assert_eq!(parse_title(""), None);
+    }
+
+    #[test]
+    fn fetch_rejects_non_http_schemes_without_network() {
+        // Must return None immediately for non-http(s) schemes (no file:// access).
+        assert!(fetch("file:///etc/passwd").is_none());
+        assert!(fetch("ftp://example.com/x").is_none());
+        assert!(fetch("not a url").is_none());
     }
 }
