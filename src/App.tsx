@@ -44,6 +44,9 @@ import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon } from "./components/Icon";
 
+// Payload MIME for dragging clipboard items onto user folders.
+const DND_TYPE = "application/x-clipvault-items";
+
 export default function App() {
   const [folder, setFolder] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
@@ -54,6 +57,8 @@ export default function App() {
   const [qrText, setQrText] = useState<string | null>(null);
   const [expandItem, setExpandItem] = useState<Item | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [draggingIds, setDraggingIds] = useState<string[] | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Item[]>([]);
@@ -397,6 +402,73 @@ export default function App() {
     return () => window.removeEventListener("keydown", h);
   }, [selectAll]);
 
+  // ─── Drag items → user folders (Task 6). Dragging a selected row drags the whole
+  // selection; only user folders are drop targets. ────────────────────────────────
+  const handleItemDragStart = useCallback(
+    (item: Item, e: React.DragEvent) => {
+      const ids =
+        selectedIds.has(item.id) && selectedIds.size > 0 ? Array.from(selectedIds) : [item.id];
+      e.dataTransfer.setData(DND_TYPE, JSON.stringify(ids));
+      e.dataTransfer.effectAllowed = "copy";
+      // Small custom drag preview (count or truncated content).
+      const node = document.createElement("div");
+      node.textContent =
+        ids.length > 1
+          ? `${ids.length} items`
+          : item.content
+          ? item.content.slice(0, 40)
+          : item.item_type;
+      node.style.cssText =
+        "position:absolute;top:-1000px;left:-1000px;padding:6px 10px;background:#1B1B21;color:#ECECF1;border:1px solid #343440;border-radius:8px;font:12px/1.2 'JetBrains Mono Variable',ui-monospace,monospace;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis";
+      document.body.appendChild(node);
+      e.dataTransfer.setDragImage(node, 12, 12);
+      setTimeout(() => node.remove(), 0);
+      setDraggingIds(ids);
+    },
+    [selectedIds]
+  );
+
+  const handleItemDragEnd = useCallback(() => {
+    setDraggingIds(null);
+    setDropTargetId(null);
+  }, []);
+
+  const assignDropped = useCallback(
+    async (ids: string[], folderId: string) => {
+      await Promise.all(ids.map((id) => assignItem(id, folderId)));
+      reloadFolders();
+      reloadCounts();
+      reload();
+      if (ids.length > 1) clearSelection();
+    },
+    [reloadFolders, reloadCounts, reload, clearSelection]
+  );
+
+  const folderDropProps = useCallback(
+    (folderId: string): React.HTMLAttributes<HTMLDivElement> => ({
+      onDragOver: (e) => {
+        if (e.dataTransfer.types.includes(DND_TYPE)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          setDropTargetId(folderId);
+        }
+      },
+      onDragLeave: () => setDropTargetId((cur) => (cur === folderId ? null : cur)),
+      onDrop: (e) => {
+        if (!e.dataTransfer.types.includes(DND_TYPE)) return;
+        e.preventDefault();
+        try {
+          const ids = JSON.parse(e.dataTransfer.getData(DND_TYPE)) as string[];
+          if (Array.isArray(ids) && ids.length) assignDropped(ids, folderId);
+        } catch {
+          /* ignore malformed payload */
+        }
+        setDropTargetId(null);
+      },
+    }),
+    [assignDropped]
+  );
+
   const bulkAddToFolder = useCallback(
     async (folderId: string) => {
       const ids = Array.from(selectedIds);
@@ -485,6 +557,8 @@ export default function App() {
         onCreateFolder={handleCreateFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
+        dropTargetId={dropTargetId}
+        folderDropProps={folderDropProps}
       />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 shrink-0">
@@ -593,6 +667,9 @@ export default function App() {
                   onCreateAndAssign={(name) => createAndAssign(it, name)}
                   onBodyClick={(e) => onBodyClick(it, flatIndexById.get(it.id) ?? i, e)}
                   onToggleSelect={(e) => onCheckboxClick(it, flatIndexById.get(it.id) ?? i, e)}
+                  onDragStart={(e) => handleItemDragStart(it, e)}
+                  onDragEnd={handleItemDragEnd}
+                  dragging={!!draggingIds && draggingIds.includes(it.id)}
                   onCopy={() => {
                     setSel(i);
                     copy(it);
@@ -681,6 +758,9 @@ export default function App() {
                         onCreateAndAssign={(name) => createAndAssign(row.item, name)}
                         onBodyClick={(e) => onBodyClick(row.item, flatIndex, e)}
                         onToggleSelect={(e) => onCheckboxClick(row.item, flatIndex, e)}
+                        onDragStart={(e) => handleItemDragStart(row.item, e)}
+                        onDragEnd={handleItemDragEnd}
+                        dragging={!!draggingIds && draggingIds.includes(row.item.id)}
                         onCopy={() => copy(row.item)}
                         onCleanCopy={() => cleanCopy(row.item)}
                         onPlainCopy={() => plainCopy(row.item)}

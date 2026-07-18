@@ -185,6 +185,7 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
           <img
             src={linkMeta.favicon_url}
             alt=""
+            draggable={false}
             className="h-4 w-4 shrink-0 rounded-sm"
             onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
           />
@@ -212,6 +213,7 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
     <img
       src={convertFileSrc(thumb)}
       alt=""
+      draggable={false}
       className="max-h-14 cursor-zoom-in rounded-md border border-border"
       onClick={(e) => {
         e.stopPropagation();
@@ -246,6 +248,9 @@ export function Card(props: {
   onStartEdit: () => void;
   onSaveEdit: (content: string) => void;
   onCancelEdit: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  dragging?: boolean;
   copied?: boolean;
 }) {
   const { item, selected, multiSelected, editing } = props;
@@ -304,7 +309,11 @@ export function Card(props: {
   return (
     <div
       onClick={props.onBodyClick}
+      draggable
+      onDragStart={props.onDragStart}
+      onDragEnd={props.onDragEnd}
       className={`group relative flex cursor-pointer items-center gap-3 rounded-lg border pl-3 pr-2.5 py-2.5 transition-colors
+        ${props.dragging ? "opacity-40" : ""}
         ${
           multiSelected
             ? "border-accent/40 bg-accent-dim/40"
