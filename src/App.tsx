@@ -41,6 +41,7 @@ import { useTimeline, DateRange } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
 import { DateFilter } from "./components/DateFilter";
+import { Logo } from "./components/Logo";
 
 export default function App() {
   const [folder, setFolder] = useState("all");
@@ -427,7 +428,10 @@ export default function App() {
       />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="flex items-center gap-4 p-4 border-b border-border shrink-0">
-          <h1 className="text-lg font-semibold shrink-0">ClipVault</h1>
+          <div className="flex items-center gap-2 shrink-0">
+            <Logo className="w-6 h-6 text-accent" />
+            <h1 className="text-lg font-semibold">ClipVault</h1>
+          </div>
           <input
             ref={searchInputRef}
             type="text"
