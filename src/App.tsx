@@ -41,6 +41,8 @@ import { TextModal } from "./components/TextModal";
 import { useTimeline, DateRange } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
+import { buildDateNav } from "./lib/dateNav";
+import { DateRail } from "./components/DateRail";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon } from "./components/Icon";
@@ -536,6 +538,22 @@ export default function App() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [loadMore]);
 
+  // Date-navigation rail: derive the ordered date groups from the timeline rows,
+  // and expose a single smooth-scroll used by both the rail and the header
+  // calendar picker so their behavior can never drift apart.
+  const dateNav = useMemo(() => buildDateNav(rows), [rows]);
+  const presentDays = useMemo(() => new Set(dateNav.map((e) => e.isoDay)), [dateNav]);
+  const isoDayToHeaderIndex = useMemo(
+    () => new Map(dateNav.map((e) => [e.isoDay, e.headerIndex])),
+    [dateNav],
+  );
+  const scrollToHeaderIndex = useCallback(
+    (headerIndex: number) => {
+      virt.scrollToIndex(headerIndex, { align: "start", behavior: "smooth" });
+    },
+    [virt],
+  );
+
   const toggle = async () => {
     const next = !privacy;
     await setPrivacy(next);
@@ -553,6 +571,19 @@ export default function App() {
   }, []);
 
   const isEmpty = isSearching ? rows.length === 0 : rows.length === 0 && pinned.length === 0;
+
+  // Scroll-spy input: the virtualizer row currently at the top of the viewport.
+  // Recomputed each render — the virtualizer re-renders as its window shifts, so
+  // the rail highlight stays live without a separate scroll listener. The top
+  // row is always mounted, so this is correct even for off-screen date groups.
+  const vItems = virt.getVirtualItems();
+  const scrollOffset = virt.scrollOffset ?? 0;
+  let topRowIndex = vItems.length > 0 ? vItems[0].index : 0;
+  for (const vi of vItems) {
+    if (vi.start <= scrollOffset + 1) topRowIndex = vi.index;
+    else break;
+  }
+  const scrolledAway = scrollOffset > 600;
 
   return (
     <div className="h-screen flex">
@@ -590,7 +621,16 @@ export default function App() {
               className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
             />
           </div>
-          <DateFilter active={dateRange} onApply={applyDateRange} onClear={() => setDateRange(null)} />
+          <DateFilter
+            active={dateRange}
+            onApply={applyDateRange}
+            onClear={() => setDateRange(null)}
+            presentDays={presentDays}
+            onNavigate={(iso) => {
+              const idx = isoDayToHeaderIndex.get(iso);
+              if (idx != null) scrollToHeaderIndex(idx);
+            }}
+          />
           <button
             onClick={doQuickAdd}
             title="Save the current clipboard now (works even in Privacy mode)"
@@ -704,6 +744,8 @@ export default function App() {
           </section>
         )}
 
+        <div className="flex min-h-0 flex-1">
+          <div className="relative flex min-w-0 flex-1">
         <div ref={parentRef} className="flex-1 overflow-auto px-3 py-3 min-h-0">
           {isEmpty && (
             <p className="text-fg-muted">
@@ -787,6 +829,29 @@ export default function App() {
               );
             })}
           </div>
+        </div>
+            {scrolledAway && (
+              <div className="pointer-events-none absolute bottom-5 left-1/2 z-20 -translate-x-1/2">
+                <button
+                  onClick={() => scrollToHeaderIndex(0)}
+                  title="Scroll back to the newest items"
+                  className="pointer-events-auto flex animate-fade-in-up items-center gap-1.5 rounded-full border border-border-strong bg-bg-raised/95 py-1.5 pl-2.5 pr-3.5 text-xs font-medium text-fg shadow-lg backdrop-blur transition-colors hover:border-accent/60"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 text-accent" aria-hidden>
+                    <path
+                      d="M8 13V3.5M8 3.5 4 7.5M8 3.5 12 7.5"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Jump to latest
+                </button>
+              </div>
+            )}
+          </div>
+          <DateRail entries={dateNav} topRowIndex={topRowIndex} onJump={scrollToHeaderIndex} />
         </div>
       </div>
 

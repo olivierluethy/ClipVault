@@ -29,7 +29,16 @@ function Calendar(props: {
   daysWithItems: Set<string>;
   active: DateRange | null;
   onApply: (r: DateRange) => void;
+  presentDays?: Set<string>;
+  onNavigate?: (iso: string) => void;
 }) {
+  // A day already present in the current view is navigated to (smooth-scroll,
+  // shared with the rail); any other day falls back to filtering the timeline.
+  const pick = (date: Date) => {
+    const iso = isoDay(date);
+    if (props.presentDays?.has(iso) && props.onNavigate) props.onNavigate(iso);
+    else props.onApply(dayRange(date));
+  };
   const today = new Date();
   // Initial view: the active single day's month, else the current month.
   const initial = props.active ? new Date(props.active.fromMs) : today;
@@ -65,7 +74,7 @@ function Calendar(props: {
     else if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(7); }
     else if (e.key === "Enter") {
       e.preventDefault();
-      if (props.daysWithItems.has(isoDay(focus))) props.onApply(dayRange(focus));
+      if (props.daysWithItems.has(isoDay(focus))) pick(focus);
     }
   };
 
@@ -130,7 +139,7 @@ function Calendar(props: {
               key={iso}
               data-day={iso}
               tabIndex={isFocus ? 0 : -1}
-              onClick={() => has && props.onApply(dayRange(date))}
+              onClick={() => has && pick(date)}
               title={has ? "Jump to this day" : "No items"}
               className={`relative grid h-8 place-items-center rounded-md font-mono text-xs transition-colors
                 ${
@@ -159,6 +168,8 @@ export function DateFilter(props: {
   active: DateRange | null;
   onApply: (r: DateRange) => void;
   onClear: () => void;
+  presentDays?: Set<string>;
+  onNavigate?: (iso: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [days, setDays] = useState<Set<string>>(new Set());
@@ -229,7 +240,20 @@ export function DateFilter(props: {
               </button>
             ))}
           </div>
-          <Calendar daysWithItems={days} active={props.active} onApply={apply} />
+          <Calendar
+            daysWithItems={days}
+            active={props.active}
+            onApply={apply}
+            presentDays={props.presentDays}
+            onNavigate={
+              props.onNavigate
+                ? (iso) => {
+                    props.onNavigate!(iso);
+                    setOpen(false);
+                  }
+                : undefined
+            }
+          />
           {props.active && (
             <button
               onClick={() => {

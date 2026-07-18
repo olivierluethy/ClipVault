@@ -41,10 +41,15 @@ export default {
           "60%": { transform: "scale(1.08)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(6px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "row-in": "row-in 0.18s ease-out both",
         "pop-check": "pop-check 0.22s ease-out both",
+        "fade-in-up": "fade-in-up 0.2s ease-out both",
       },
     },
   },
