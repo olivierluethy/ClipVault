@@ -92,16 +92,27 @@ impl Storage {
 
     // Wired to an IPC command in a later task; exercised directly by tests until then.
     #[allow(dead_code)]
-    pub fn list_items(&self, limit: i64, before: Option<i64>) -> rusqlite::Result<Vec<ItemDto>> {
+    pub fn list_items(
+        &self,
+        limit: i64,
+        before_created_at: Option<i64>,
+        before_id: Option<&str>,
+    ) -> rusqlite::Result<Vec<ItemDto>> {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND pinned = 0 AND (?2 IS NULL OR created_at < ?2)
-             ORDER BY created_at DESC LIMIT ?1"
+             WHERE deleted_at IS NULL AND pinned = 0
+               AND (?2 IS NULL
+                    OR created_at < ?2
+                    OR (created_at = ?2 AND id < ?3))
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?1"
         );
         let mut stmt = conn.prepare(&sql)?;
-        let rows: rusqlite::Result<Vec<ItemDto>> = stmt.query_map(params![limit, before], map_item)?.collect();
-        rows
+        let rows: Vec<ItemDto> = stmt
+            .query_map(rusqlite::params![limit, before_created_at, before_id], map_item)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
     }
 
     // Wired to an IPC command in a later task; exercised directly by tests until then.
@@ -171,23 +182,48 @@ mod tests {
             NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, content_hash:hash.into()}, t).unwrap();
         mk("a","ha",100); mk("b","hb",200); mk("c","hc",300);
         // page 1: newest first
-        let p1 = s.list_items(2, None).unwrap();
+        let p1 = s.list_items(2, None, None).unwrap();
         assert_eq!(p1.iter().map(|i| i.content.clone().unwrap()).collect::<Vec<_>>(), vec!["c","b"]);
-        // page 2 via cursor = last created_at
-        let p2 = s.list_items(2, Some(p1.last().unwrap().created_at)).unwrap();
+        // page 2 via compound cursor = last row's (created_at, id)
+        let last = p1.last().unwrap();
+        let p2 = s.list_items(2, Some(last.created_at), Some(&last.id)).unwrap();
         assert_eq!(p2.iter().map(|i| i.content.clone().unwrap()).collect::<Vec<_>>(), vec!["a"]);
         // pin "b" -> excluded from list_items, present in list_pinned
-        let id_b = s.list_items(10, None).unwrap().into_iter().find(|i| i.content.as_deref()==Some("b")).unwrap().id;
+        let id_b = s.list_items(10, None, None).unwrap().into_iter().find(|i| i.content.as_deref()==Some("b")).unwrap().id;
         s.set_pinned(&id_b, true).unwrap();
-        assert!(s.list_items(10, None).unwrap().iter().all(|i| i.content.as_deref()!=Some("b")));
+        assert!(s.list_items(10, None, None).unwrap().iter().all(|i| i.content.as_deref()!=Some("b")));
         assert_eq!(s.list_pinned().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn list_items_pages_without_skipping_tied_timestamps() {
+        let (_d, s) = storage();
+        // three items with the SAME created_at (ties)
+        for (c, h) in [("a","ha"),("b","hb"),("c","hc")] {
+            s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some(c.into()),file_path:None,content_hash:h.into()}, 500).unwrap();
+        }
+        let mut seen = Vec::new();
+        let mut cursor: Option<(i64, String)> = None;
+        loop {
+            let page = match &cursor {
+                None => s.list_items(2, None, None).unwrap(),
+                Some((ts, id)) => s.list_items(2, Some(*ts), Some(id)).unwrap(),
+            };
+            if page.is_empty() { break; }
+            for it in &page { seen.push(it.content.clone().unwrap()); }
+            let last = page.last().unwrap();
+            cursor = Some((last.created_at, last.id.clone()));
+            if page.len() < 2 { break; }
+        }
+        seen.sort();
+        assert_eq!(seen, vec!["a","b","c"]);  // all three retrieved, none skipped
     }
 
     #[test]
     fn set_pinned_toggles() {
         let (_d, s) = storage();
         s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("p".into()),file_path:None,content_hash:"hp".into()},100).unwrap();
-        let id = s.list_items(10,None).unwrap()[0].id.clone();
+        let id = s.list_items(10,None,None).unwrap()[0].id.clone();
         s.set_pinned(&id, true).unwrap();
         assert_eq!(s.list_pinned().unwrap().len(), 1);
         s.set_pinned(&id, false).unwrap();
