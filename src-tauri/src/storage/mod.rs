@@ -48,17 +48,18 @@ impl Storage {
             })?;
         }
 
+        // Encryption-at-rest (Story 1.2): resolve the SQLCipher key (OS keyring by
+        // default; overridable via CLIPVAULT_KEY; None under tests → plain SQLite).
+        // If an existing DB file is still plaintext, transparently re-encrypt it once
+        // before opening.
+        let key = resolve_db_key();
+        if let Some(k) = &key {
+            migrate_plaintext_to_encrypted(db_path, k)?;
+        }
+
         let conn = Connection::open(db_path)?;
-        // Encryption-at-rest (opt-in, P3-4): if a passphrase is provided via the
-        // CLIPVAULT_KEY env var, apply it as the SQLCipher key BEFORE any other access.
-        // With the `sqlcipher` cargo feature this encrypts/decrypts the DB; on the
-        // default (plain SQLite) build, `PRAGMA key` is an unknown pragma and is
-        // silently ignored, so this is a safe no-op.
-        if let Ok(key) = std::env::var("CLIPVAULT_KEY") {
-            if !key.is_empty() {
-                let escaped = key.replace('\'', "''");
-                conn.execute_batch(&format!("PRAGMA key = '{escaped}';"))?;
-            }
+        if let Some(k) = &key {
+            apply_key(&conn, k)?;
         }
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
@@ -168,6 +169,123 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     }
     let _ = version;
     Ok(())
+}
+
+// ─── Encryption at rest (SQLCipher + OS keyring) ────────────────────────────────
+
+/// Resolve the SQLCipher passphrase. Order: `CLIPVAULT_KEY` env override (power users
+/// / tooling), then the OS keyring (get-or-create a random key). Returns `None` under
+/// `cfg(test)` (so unit tests run on plain, unencrypted temp DBs) and if the keyring is
+/// unavailable — in which case the DB is opened unencrypted rather than failing to start.
+fn resolve_db_key() -> Option<String> {
+    if let Ok(k) = std::env::var("CLIPVAULT_KEY") {
+        if !k.is_empty() {
+            return Some(k);
+        }
+    }
+    keyring_key()
+}
+
+#[cfg(test)]
+fn keyring_key() -> Option<String> {
+    None
+}
+
+/// Fetch the app's DB key from the OS Secret Service, creating (and storing) a fresh
+/// random one on first run. A `None` here means "open unencrypted" — chosen over a hard
+/// failure so a missing/locked keyring never bricks the app.
+#[cfg(not(test))]
+fn keyring_key() -> Option<String> {
+    let entry = keyring::Entry::new("clipvault", "database-key").ok()?;
+    match entry.get_password() {
+        Ok(k) if !k.is_empty() => Some(k),
+        _ => {
+            // 256 bits of randomness as hex (two v4 UUIDs = 244 random bits).
+            let key = format!(
+                "{}{}",
+                uuid::Uuid::new_v4().simple(),
+                uuid::Uuid::new_v4().simple()
+            );
+            match entry.set_password(&key) {
+                Ok(()) => Some(key),
+                Err(e) => {
+                    eprintln!("clipvault: could not store DB key in keyring ({e}); opening unencrypted");
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// Apply the SQLCipher key to a freshly opened connection, before any other access.
+fn apply_key(conn: &Connection, key: &str) -> rusqlite::Result<()> {
+    let escaped = key.replace('\'', "''");
+    conn.execute_batch(&format!("PRAGMA key = '{escaped}';"))
+}
+
+/// Return true if `db_path` opens and reads with `key` (i.e. it's already encrypted
+/// with this key, or is a fresh/empty file).
+fn opens_with_key(db_path: &Path, key: &str) -> bool {
+    match Connection::open(db_path) {
+        Ok(conn) => {
+            apply_key(&conn, key).is_ok()
+                && conn
+                    .query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0))
+                    .is_ok()
+        }
+        Err(_) => false,
+    }
+}
+
+/// One-time migration: if `db_path` exists as a *plaintext* SQLite DB, re-encrypt it in
+/// place with `key` using `sqlcipher_export`. The original is backed up alongside as
+/// `*.plaintext.bak` before the swap. No-op for a missing/empty file or a DB already
+/// encrypted with this key.
+fn migrate_plaintext_to_encrypted(db_path: &Path, key: &str) -> rusqlite::Result<()> {
+    if !db_path.exists() {
+        return Ok(());
+    }
+    if std::fs::metadata(db_path).map(|m| m.len()).unwrap_or(0) == 0 {
+        return Ok(());
+    }
+    if opens_with_key(db_path, key) {
+        return Ok(()); // already encrypted (or empty) — nothing to do
+    }
+
+    let db_str = db_path.to_string_lossy().to_string();
+    let enc_path = format!("{db_str}.enc");
+    let bak_path = format!("{db_str}.plaintext.bak");
+
+    // Preserve the original before touching anything.
+    std::fs::copy(db_path, &bak_path).map_err(cantopen)?;
+    let _ = std::fs::remove_file(&enc_path);
+
+    {
+        let plain = Connection::open(db_path)?;
+        // Fold any WAL back into the main file so the export sees a consistent state.
+        let _ = plain.pragma_update(None, "journal_mode", "DELETE");
+        let esc_enc = enc_path.replace('\'', "''");
+        let esc_key = key.replace('\'', "''");
+        plain.execute_batch(&format!(
+            "ATTACH DATABASE '{esc_enc}' AS encrypted KEY '{esc_key}';
+             SELECT sqlcipher_export('encrypted');
+             DETACH DATABASE encrypted;"
+        ))?;
+    }
+
+    // Swap the encrypted copy in for the plaintext original, and drop its stale WAL/SHM.
+    std::fs::rename(&enc_path, db_path).map_err(cantopen)?;
+    for suffix in ["-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{db_str}{suffix}"));
+    }
+    Ok(())
+}
+
+fn cantopen(e: std::io::Error) -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+        Some(format!("encryption migration failed: {e}")),
+    )
 }
 
 #[cfg(test)]

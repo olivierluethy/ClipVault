@@ -90,20 +90,24 @@ impl Storage {
         Ok(rows)
     }
 
-    /// Insert an imported row, skipping duplicates (same `content_hash`). Returns true
-    /// if a new row was inserted, false if it already existed. Preserves the original
+    /// Insert an imported row, skipping duplicates (same `content_hash`). Returns
+    /// `(item_id, inserted)` — the id of the row (the existing one on a duplicate, a
+    /// fresh one on insert) so the caller can restore folder memberships either way,
+    /// and `inserted` = whether a new row was actually created. Preserves the original
     /// timestamps / copy_count / pinned flag and keeps the FTS index in sync.
-    pub fn insert_imported(&self, row: ImportRow) -> rusqlite::Result<bool> {
+    pub fn insert_imported(&self, row: ImportRow) -> rusqlite::Result<(String, bool)> {
         let conn = self.conn.lock().unwrap();
-        let exists: bool = conn
-            .query_row(
-                "SELECT 1 FROM items WHERE content_hash = ?1",
-                params![row.content_hash],
-                |_| Ok(()),
-            )
-            .is_ok();
-        if exists {
-            return Ok(false);
+        let existing: Option<String> = match conn.query_row(
+            "SELECT id FROM items WHERE content_hash = ?1",
+            params![row.content_hash],
+            |r| r.get(0),
+        ) {
+            Ok(id) => Some(id),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e),
+        };
+        if let Some(id) = existing {
+            return Ok((id, false));
         }
         let id = uuid::Uuid::new_v4().to_string();
         conn.execute(
@@ -123,7 +127,7 @@ impl Storage {
                 params![id, content],
             )?;
         }
-        Ok(true)
+        Ok((id, true))
     }
 
     /// Enforce retention limits by hard-deleting non-pinned items that are either older
@@ -258,25 +262,27 @@ mod tests {
         let (_d2, s2) = storage();
         let mut inserted = 0;
         for r in &rows {
-            if s2.insert_imported(ImportRow {
+            let (_id, did) = s2.insert_imported(ImportRow {
                 item_type: r.item_type.clone(), content: r.content.clone(),
                 file_path: r.file_path.clone(), preview_path: r.preview_path.clone(),
                 content_hash: r.content_hash.clone(), copy_count: r.copy_count,
                 pinned: r.pinned, created_at: r.created_at, updated_at: r.updated_at,
                 metadata: r.metadata.clone(),
-            }).unwrap() { inserted += 1; }
+            }).unwrap();
+            if did { inserted += 1; }
         }
         assert_eq!(inserted, 2);
         assert_eq!(s2.item_count().unwrap(), 2);
         // re-importing the same rows inserts nothing (dedup by hash)
         for r in &rows {
-            assert!(!s2.insert_imported(ImportRow {
+            let (_id, did) = s2.insert_imported(ImportRow {
                 item_type: r.item_type.clone(), content: r.content.clone(),
                 file_path: r.file_path.clone(), preview_path: r.preview_path.clone(),
                 content_hash: r.content_hash.clone(), copy_count: r.copy_count,
                 pinned: r.pinned, created_at: r.created_at, updated_at: r.updated_at,
                 metadata: r.metadata.clone(),
-            }).unwrap());
+            }).unwrap();
+            assert!(!did);
         }
         assert_eq!(s2.item_count().unwrap(), 2);
         // imported content is searchable (FTS synced)

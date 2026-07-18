@@ -182,6 +182,8 @@ export function Card(props: {
   onPin: () => void;
   onZoom: () => void;
   onQr: () => void;
+  onOpenLink: () => void;
+  onExpandText: () => void;
   onStartEdit: () => void;
   onSaveEdit: (content: string) => void;
   onCancelEdit: () => void;
@@ -198,6 +200,10 @@ export function Card(props: {
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const linkMeta = item.item_type === "link" ? parseLinkMetadata(item.metadata) : null;
+  // Long text/number/link content that gets truncated in the row → offer "show more".
+  const isLongText =
+    (item.item_type === "text" || item.item_type === "number" || item.item_type === "link") &&
+    ((item.content?.length ?? 0) > 80 || (item.content?.includes("\n") ?? false));
 
   useEffect(() => {
     if (editing) {
@@ -370,6 +376,32 @@ export function Card(props: {
               />
             )}
           </div>
+          {item.item_type === "link" && (
+            <button
+              title="Open in default browser"
+              aria-label="Open in default browser"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onOpenLink();
+              }}
+              className="rounded px-1.5 py-1 text-sm text-fg-muted hover:bg-bg-raised hover:text-accent"
+            >
+              🌐
+            </button>
+          )}
+          {isLongText && (
+            <button
+              title="Show more"
+              aria-label="Show more"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onExpandText();
+              }}
+              className="rounded px-1.5 py-1 text-sm text-fg-muted hover:bg-bg-raised hover:text-accent"
+            >
+              ⤢
+            </button>
+          )}
           {contentBased && (
             <button
               title="Show QR code"

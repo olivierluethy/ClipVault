@@ -78,6 +78,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
@@ -306,6 +307,7 @@ pub fn run() {
             crate::ipc::export_data,
             crate::ipc::import_data,
             crate::ipc::qr_svg,
+            crate::ipc::open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");

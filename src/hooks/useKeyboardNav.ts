@@ -9,6 +9,8 @@ export function useKeyboardNav(
     pin: (it: Item) => void;
     edit: (it: Item) => void;
     close: () => void;
+    /** Copy the selected item, then hide the window (Enter in the speed workflow). */
+    copyAndHide: (it: Item) => void;
   }
 ) {
   const [sel, setSel] = useState(0);
@@ -27,7 +29,7 @@ export function useKeyboardNav(
         e.preventDefault();
       } else if (e.key === "Enter") {
         const it = flatItems[sel];
-        if (it) actions.copy(it);
+        if (it) actions.copyAndHide(it);
       } else if (e.key === "Delete") {
         const it = flatItems[sel];
         if (it) actions.del(it);

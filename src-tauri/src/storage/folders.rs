@@ -63,6 +63,42 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Return the id of the folder named `name`, creating it if none exists. Used by
+    /// import to reconstruct folder structures by name (robust to differing ids across
+    /// machines). Matches the first folder with that exact name.
+    pub fn folder_id_by_name_or_create(&self, name: &str, now: i64) -> rusqlite::Result<String> {
+        {
+            let conn = self.conn.lock().unwrap();
+            let existing: Option<String> = match conn.query_row(
+                "SELECT id FROM folders WHERE name = ?1 ORDER BY sort_order ASC LIMIT 1",
+                params![name],
+                |r| r.get(0),
+            ) {
+                Ok(id) => Some(id),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e),
+            };
+            if let Some(id) = existing {
+                return Ok(id);
+            }
+        }
+        self.create_folder(name, now)
+    }
+
+    /// Folder *names* an item belongs to (used by export).
+    pub fn folder_names_for_item(&self, item_id: &str) -> rusqlite::Result<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT f.name FROM folders f
+             JOIN item_folders itf ON itf.folder_id = f.id
+             WHERE itf.item_id = ?1",
+        )?;
+        let rows: Vec<String> = stmt
+            .query_map(params![item_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     pub fn assign_item(&self, item_id: &str, folder_id: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(

@@ -320,9 +320,8 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
                   : "Loading…"}
               </div>
               <div>
-                Encryption at rest is available as an opt-in build
-                (<code className="text-fg">--features sqlcipher</code>) with a
-                <code className="text-fg"> CLIPVAULT_KEY</code> passphrase.
+                🔒 Database encrypted at rest (SQLCipher). The key is stored in your
+                system keyring and applied automatically at startup.
               </div>
             </div>
           </Section>

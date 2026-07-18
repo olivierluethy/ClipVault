@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type Item = {
   id: string;
@@ -101,3 +102,9 @@ export const importData = (path: string) => invoke<number>("import_data", { path
 
 /** Render an item's text/link as a scannable SVG QR code. */
 export const qrSvg = (text: string) => invoke<string>("qr_svg", { text });
+
+/** Open a captured link in the user's default browser. */
+export const openUrl = (url: string) => invoke<void>("open_url", { url });
+
+/** Hide the main window to the tray (used after Enter-to-copy in the speed workflow). */
+export const hideWindow = () => getCurrentWindow().hide();

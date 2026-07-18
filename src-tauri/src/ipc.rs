@@ -364,6 +364,9 @@ pub(crate) fn prune_backups(dir: &std::path::Path, keep: usize) {
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ExportFile {
     version: u32,
+    /// All user folder names — so empty folders survive a round-trip too.
+    #[serde(default)]
+    folders: Vec<String>,
     items: Vec<ExportItemJson>,
 }
 
@@ -377,6 +380,9 @@ struct ExportItemJson {
     created_at: i64,
     updated_at: i64,
     metadata: Option<String>,
+    /// User folder names this item belongs to (restored by name on import).
+    #[serde(default)]
+    folders: Vec<String>,
     /// base64 of the original attachment bytes (image/gif items only).
     file_b64: Option<String>,
     file_ext: Option<String>,
@@ -410,6 +416,7 @@ pub fn export_data(state: State<AppState>, path: String) -> Result<usize, String
             Some(p) => std::fs::read(p).ok().map(|b| b64.encode(b)),
             None => None,
         };
+        let folders = state.storage.folder_names_for_item(&r.id).map_err(|e| e.to_string())?;
         items.push(ExportItemJson {
             item_type: r.item_type,
             content: r.content,
@@ -419,6 +426,7 @@ pub fn export_data(state: State<AppState>, path: String) -> Result<usize, String
             created_at: r.created_at,
             updated_at: r.updated_at,
             metadata: r.metadata,
+            folders,
             file_ext: ext_of(&r.file_path),
             file_b64,
             preview_ext: ext_of(&r.preview_path),
@@ -426,7 +434,9 @@ pub fn export_data(state: State<AppState>, path: String) -> Result<usize, String
         });
     }
     let count = items.len();
-    let export = ExportFile { version: 1, items };
+    let folders = state.storage.list_folders().map_err(|e| e.to_string())?
+        .into_iter().map(|f| f.name).collect();
+    let export = ExportFile { version: 1, folders, items };
     let json = serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())?;
     Ok(count)
@@ -443,6 +453,11 @@ pub fn import_data(app: tauri::AppHandle, state: State<AppState>, path: String) 
     let export: ExportFile = serde_json::from_str(&raw).map_err(|e| format!("not a valid ClipVault export: {e}"))?;
     let attach_dir = state.storage.attachments_dir();
     std::fs::create_dir_all(&attach_dir).map_err(|e| e.to_string())?;
+
+    // Recreate all folders first (so empty folders survive), then assign per item.
+    for name in &export.folders {
+        let _ = state.storage.folder_id_by_name_or_create(name, now_ms());
+    }
 
     let mut inserted = 0usize;
     for it in export.items {
@@ -463,7 +478,7 @@ pub fn import_data(app: tauri::AppHandle, state: State<AppState>, path: String) 
         let file_path = write_attachment(&it.file_b64, &it.file_ext)?;
         let preview_path = write_attachment(&it.preview_b64, &it.preview_ext)?;
 
-        let did = state.storage.insert_imported(crate::storage::ImportRow {
+        let (item_id, did) = state.storage.insert_imported(crate::storage::ImportRow {
             item_type: it.item_type,
             content: it.content,
             file_path,
@@ -476,6 +491,12 @@ pub fn import_data(app: tauri::AppHandle, state: State<AppState>, path: String) 
             metadata: it.metadata,
         }).map_err(|e| e.to_string())?;
         if did { inserted += 1; }
+        // Restore folder memberships by name (creating folders as needed), for both new
+        // and pre-existing (duplicate) items so an import merges memberships too.
+        for name in &it.folders {
+            let fid = state.storage.folder_id_by_name_or_create(name, now_ms()).map_err(|e| e.to_string())?;
+            let _ = state.storage.assign_item(&item_id, &fid);
+        }
     }
     if inserted > 0 {
         let _ = app.emit("item-added", ());
@@ -489,4 +510,11 @@ pub fn import_data(app: tauri::AppHandle, state: State<AppState>, path: String) 
 #[tauri::command]
 pub fn qr_svg(text: String) -> Result<String, String> {
     crate::qr::svg_for(&text)
+}
+
+/// Open a URL (a captured link) in the user's default browser.
+#[tauri::command]
+pub fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }

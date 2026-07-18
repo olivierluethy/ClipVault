@@ -26,6 +26,8 @@ import {
   search,
   getSettingStr,
   setSettingStr,
+  openUrl,
+  hideWindow,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
@@ -34,6 +36,7 @@ import { Sidebar } from "./components/Sidebar";
 import { BulkActionBar } from "./components/BulkActionBar";
 import { Settings } from "./components/Settings";
 import { QrModal } from "./components/QrModal";
+import { TextModal } from "./components/TextModal";
 import { useTimeline } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
@@ -45,6 +48,7 @@ export default function App() {
   const [quickMsg, setQuickMsg] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [qrText, setQrText] = useState<string | null>(null);
+  const [expandItem, setExpandItem] = useState<Item | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -344,6 +348,14 @@ export default function App() {
     reloadCounts();
   }, [selectedIds, clearSelection, reload, reloadCounts]);
 
+  const copyAndHide = useCallback(
+    async (it: Item) => {
+      await copyItem(it.id);
+      await hideWindow();
+    },
+    []
+  );
+
   const { sel, setSel } = useKeyboardNav(flatItems, {
     copy,
     del,
@@ -353,6 +365,7 @@ export default function App() {
       setZoom(null);
       setEditingId(null);
     },
+    copyAndHide,
   });
 
   const virt = useVirtualizer({
@@ -498,6 +511,8 @@ export default function App() {
                   onPin={() => pin(it)}
                   onZoom={() => setZoom(it)}
                   onQr={() => setQrText(it.content ?? "")}
+                  onOpenLink={() => it.content && openUrl(it.content)}
+                  onExpandText={() => setExpandItem(it)}
                   onStartEdit={() => setEditingId(it.id)}
                   onSaveEdit={(c) => saveEdit(it.id, c)}
                   onCancelEdit={() => setEditingId(null)}
@@ -558,6 +573,8 @@ export default function App() {
                         onPin={() => pin(row.item)}
                         onZoom={() => setZoom(row.item)}
                         onQr={() => setQrText(row.item.content ?? "")}
+                        onOpenLink={() => row.item.content && openUrl(row.item.content)}
+                        onExpandText={() => setExpandItem(row.item)}
                         onStartEdit={() => setEditingId(row.item.id)}
                         onSaveEdit={(c) => saveEdit(row.item.id, c)}
                         onCancelEdit={() => setEditingId(null)}
@@ -585,6 +602,15 @@ export default function App() {
       )}
 
       <QrModal text={qrText} onClose={() => setQrText(null)} />
+
+      <TextModal
+        text={expandItem?.content ?? null}
+        onClose={() => setExpandItem(null)}
+        onCopy={() => {
+          if (expandItem) copy(expandItem);
+          setExpandItem(null);
+        }}
+      />
 
       {showWelcome && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
