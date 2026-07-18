@@ -10,7 +10,6 @@ pub struct FolderDto {
 }
 
 impl Storage {
-    #[allow(dead_code)]
     pub fn create_folder(&self, name: &str, now: i64) -> rusqlite::Result<String> {
         let conn = self.conn.lock().unwrap();
         let id = Uuid::new_v4().to_string();
@@ -26,14 +25,12 @@ impl Storage {
         Ok(id)
     }
 
-    #[allow(dead_code)]
     pub fn rename_folder(&self, id: &str, name: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE folders SET name = ?1 WHERE id = ?2", params![name, id])?;
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn delete_folder(&self, id: &str, delete_items: bool, now: i64) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         if delete_items {
@@ -48,7 +45,6 @@ impl Storage {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn list_folders(&self) -> rusqlite::Result<Vec<FolderDto>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -67,7 +63,6 @@ impl Storage {
         Ok(rows)
     }
 
-    #[allow(dead_code)]
     pub fn assign_item(&self, item_id: &str, folder_id: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -77,7 +72,6 @@ impl Storage {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn unassign_item(&self, item_id: &str, folder_id: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -87,7 +81,6 @@ impl Storage {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn folders_for_item(&self, item_id: &str) -> rusqlite::Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT folder_id FROM item_folders WHERE item_id = ?1")?;
@@ -97,7 +90,6 @@ impl Storage {
         Ok(rows)
     }
 
-    #[allow(dead_code)]
     pub fn list_items_in_folder(
         &self,
         folder_id: &str,

@@ -6,7 +6,6 @@ mod items;
 pub use items::*;
 mod settings;
 mod folders;
-#[allow(unused_imports)] // FolderDto is consumed by the folders IPC layer (next task).
 pub use folders::*;
 
 pub struct Storage {

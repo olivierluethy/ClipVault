@@ -1,7 +1,7 @@
 use tauri::State;
 use std::sync::atomic::Ordering;
 use crate::state::AppState;
-use crate::storage::ItemDto;
+use crate::storage::{ItemDto, FolderDto};
 use crate::clipboard_writer::WriteRequest;
 
 fn now_ms() -> i64 {
@@ -80,6 +80,52 @@ pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
         }
     };
     state.writer.send(req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_folder(state: State<AppState>, name: String) -> Result<String, String> {
+    state.storage.create_folder(&name, now_ms()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rename_folder(state: State<AppState>, id: String, name: String) -> Result<(), String> {
+    state.storage.rename_folder(&id, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_folder(state: State<AppState>, id: String, delete_items: bool) -> Result<(), String> {
+    state.storage.delete_folder(&id, delete_items, now_ms()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_folders(state: State<AppState>) -> Result<Vec<FolderDto>, String> {
+    state.storage.list_folders().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn assign_item(state: State<AppState>, item_id: String, folder_id: String) -> Result<(), String> {
+    state.storage.assign_item(&item_id, &folder_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn unassign_item(state: State<AppState>, item_id: String, folder_id: String) -> Result<(), String> {
+    state.storage.unassign_item(&item_id, &folder_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn folders_for_item(state: State<AppState>, item_id: String) -> Result<Vec<String>, String> {
+    state.storage.folders_for_item(&item_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_items_in_folder(
+    state: State<AppState>,
+    folder_id: String,
+    limit: i64,
+    before_created_at: Option<i64>,
+    before_id: Option<String>,
+) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_items_in_folder(&folder_id, limit, before_created_at, before_id.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
