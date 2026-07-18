@@ -14,6 +14,7 @@ import {
   MoreIcon,
   CleanIcon,
   TextIcon,
+  CheckIcon,
 } from "./Icon";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
@@ -252,6 +253,9 @@ export function Card(props: {
   onCreateAndAssign: (name: string) => void;
   onBodyClick: (e: React.MouseEvent) => void;
   onToggleSelect: (e: React.MouseEvent) => void;
+  /** Drag-to-select: pointer gestures scoped to the checkbox column. */
+  onCheckboxPointerDown?: (e: React.PointerEvent) => void;
+  onCheckboxPointerEnter?: (e: React.PointerEvent) => void;
   onCopy: () => void;
   onCleanCopy: () => void;
   onPlainCopy: () => void;
@@ -343,24 +347,51 @@ export function Card(props: {
         <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent" />
       )}
 
-      {/* Selection checkbox — muted until row hover or checked. */}
+      {/* Selection target — a generous, forgiving hit zone (the whole left
+          column, ≥36px, 44px on touch-narrow rows). The drawn box stays modest
+          but grows on hover so it reads as the thing to click. Dragging down the
+          column sweep-selects; that gesture is scoped here so it never collides
+          with the row's drag-to-folder. */}
       <button
         role="checkbox"
         aria-checked={multiSelected}
         aria-label={multiSelected ? "Deselect item" : "Select item"}
-        title="Select"
+        title="Select — shift-click for a range, drag to sweep"
+        draggable={false}
+        onDragStart={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          // Touch pointers are implicitly captured to this button; release so
+          // the sweep can register pointerenter on the rows it crosses.
+          if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          }
+          props.onCheckboxPointerDown?.(e);
+        }}
+        onPointerEnter={(e) => props.onCheckboxPointerEnter?.(e)}
         onClick={(e) => {
           e.stopPropagation();
           props.onToggleSelect(e);
         }}
-        className={`grid h-[15px] w-[15px] shrink-0 place-items-center rounded border transition-opacity
-          ${
-            multiSelected
-              ? "border-accent bg-accent text-bg opacity-100"
-              : "border-border-strong text-transparent opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-          }`}
+        className="card-checkbox group/cb -ml-1 grid h-9 w-8 shrink-0 place-items-center rounded-md transition-colors hover:bg-bg-hover/60"
       >
-        {multiSelected && <span className="animate-pop-check text-[9px] leading-none">✓</span>}
+        <span
+          className={`grid h-[16px] w-[16px] place-items-center rounded border transition-all duration-150 ease-out group-hover/cb:scale-[1.28]
+            ${
+              multiSelected
+                ? "border-accent bg-accent text-bg opacity-100 shadow-[0_0_0_3px_rgba(123,97,255,0.16)]"
+                : "border-border-strong text-transparent opacity-0 group-hover:opacity-100 group-hover/cb:border-accent focus-visible:opacity-100"
+            }`}
+        >
+          {multiSelected && (
+            <span className="animate-pop-check">
+              <CheckIcon className="h-3 w-3" />
+            </span>
+          )}
+        </span>
       </button>
 
       {/* Type code (monospace, quiet). Dropped on tight rows to protect the preview. */}

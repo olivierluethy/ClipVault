@@ -77,6 +77,11 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const parentRef = useRef<HTMLDivElement>(null);
   const anchorIndexRef = useRef<number | null>(null);
+  // Drag-to-select down the checkbox column. `select` fixes the gesture's mode
+  // (add vs remove) from the item it started on; `moved` distinguishes a sweep
+  // from a plain click so the trailing click isn't double-counted.
+  const sweepRef = useRef<{ startIndex: number; select: boolean; moved: boolean } | null>(null);
+  const suppressCheckboxClickRef = useRef(false);
 
   const reloadCounts = useCallback(async () => {
     const list = await folderCounts();
@@ -360,6 +365,11 @@ export default function App() {
   // Checkbox click: shift-click extends a contiguous range from the last anchor.
   const onCheckboxClick = useCallback(
     (it: Item, index: number, e: React.MouseEvent) => {
+      // A click that closes a sweep-select gesture isn't a toggle — swallow it.
+      if (suppressCheckboxClickRef.current) {
+        suppressCheckboxClickRef.current = false;
+        return;
+      }
       if (e.shiftKey && anchorIndexRef.current !== null) {
         selectRange(anchorIndexRef.current, index);
         return;
@@ -368,6 +378,60 @@ export default function App() {
       anchorIndexRef.current = index;
     },
     [selectRange, toggleSelected]
+  );
+
+  // Add (or remove) every item between two flat indices — the sweep primitive.
+  const applyRange = useCallback(
+    (from: number, to: number, select: boolean) => {
+      const start = Math.min(from, to);
+      const end = Math.max(from, to);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (let i = start; i <= end; i++) {
+          const it = flatItems[i];
+          if (!it) continue;
+          if (select) next.add(it.id);
+          else next.delete(it.id);
+        }
+        return next;
+      });
+      anchorIndexRef.current = to;
+    },
+    [flatItems]
+  );
+
+  const endCheckboxSweep = useCallback(() => {
+    const s = sweepRef.current;
+    sweepRef.current = null;
+    // A gesture that actually moved should eat the click that follows pointerup.
+    if (s?.moved) suppressCheckboxClickRef.current = true;
+  }, []);
+
+  const onCheckboxPointerDown = useCallback(
+    (it: Item, index: number, e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      // Clear any leftover suppression from a prior drag that ended off a
+      // checkbox (its swallowing click never arrived) so this gesture's own
+      // click still registers.
+      suppressCheckboxClickRef.current = false;
+      sweepRef.current = { startIndex: index, select: !selectedIds.has(it.id), moved: false };
+      window.addEventListener("pointerup", endCheckboxSweep, { once: true });
+    },
+    [selectedIds, endCheckboxSweep]
+  );
+
+  const onCheckboxPointerEnter = useCallback(
+    (index: number) => {
+      const s = sweepRef.current;
+      if (!s) return;
+      if (!s.moved) {
+        // First row entered → this is a drag, not a click; seed the start item.
+        s.moved = true;
+        applyRange(s.startIndex, s.startIndex, s.select);
+      }
+      applyRange(s.startIndex, index, s.select);
+    },
+    [applyRange]
   );
 
   // Item ids under a given date-group header (up to the next header).
@@ -416,6 +480,12 @@ export default function App() {
   // selection; only user folders are drop targets. ────────────────────────────────
   const handleItemDragStart = useCallback(
     (item: Item, e: React.DragEvent) => {
+      // A drag that began in the checkbox column is a sweep-select, not a
+      // drag-to-folder — cancel the native drag so the two never collide.
+      if (sweepRef.current) {
+        e.preventDefault();
+        return;
+      }
       const ids =
         selectedIds.has(item.id) && selectedIds.size > 0 ? Array.from(selectedIds) : [item.id];
       e.dataTransfer.setData(DND_TYPE, JSON.stringify(ids));
@@ -726,6 +796,8 @@ export default function App() {
                   onCreateAndAssign={(name) => createAndAssign(it, name)}
                   onBodyClick={(e) => onBodyClick(it, flatIndexById.get(it.id) ?? i, e)}
                   onToggleSelect={(e) => onCheckboxClick(it, flatIndexById.get(it.id) ?? i, e)}
+                  onCheckboxPointerDown={(e) => onCheckboxPointerDown(it, flatIndexById.get(it.id) ?? i, e)}
+                  onCheckboxPointerEnter={() => onCheckboxPointerEnter(flatIndexById.get(it.id) ?? i)}
                   onDragStart={(e) => handleItemDragStart(it, e)}
                   onDragEnd={handleItemDragEnd}
                   dragging={!!draggingIds && draggingIds.includes(it.id)}
@@ -789,18 +861,22 @@ export default function App() {
                   data-index={v.index}
                 >
                   {row.kind === "header" ? (
-                    <div className="sticky top-0 bg-bg py-1 z-10 flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select all in ${row.label}`}
+                    <div className="sticky top-0 z-10 flex items-center gap-1 bg-bg py-1">
+                      <label
                         title={`Select all in ${row.label}`}
-                        checked={groupAll}
-                        ref={(el) => {
-                          if (el) el.indeterminate = groupSome && !groupAll;
-                        }}
-                        onChange={() => toggleGroup(groupIds)}
-                        className="h-3.5 w-3.5 accent-accent cursor-pointer"
-                      />
+                        className="group/gcb -ml-1.5 grid h-7 w-7 cursor-pointer place-items-center rounded-md transition-colors hover:bg-bg-hover/60"
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={`Select all in ${row.label}`}
+                          checked={groupAll}
+                          ref={(el) => {
+                            if (el) el.indeterminate = groupSome && !groupAll;
+                          }}
+                          onChange={() => toggleGroup(groupIds)}
+                          className="h-4 w-4 cursor-pointer accent-accent transition-transform duration-150 ease-out group-hover/gcb:scale-125"
+                        />
+                      </label>
                       <span className="text-xs uppercase text-fg-muted">{row.label}</span>
                     </div>
                   ) : (
@@ -819,6 +895,8 @@ export default function App() {
                         onCreateAndAssign={(name) => createAndAssign(row.item, name)}
                         onBodyClick={(e) => onBodyClick(row.item, flatIndex, e)}
                         onToggleSelect={(e) => onCheckboxClick(row.item, flatIndex, e)}
+                        onCheckboxPointerDown={(e) => onCheckboxPointerDown(row.item, flatIndex, e)}
+                        onCheckboxPointerEnter={() => onCheckboxPointerEnter(flatIndex)}
                         onDragStart={(e) => handleItemDragStart(row.item, e)}
                         onDragEnd={handleItemDragEnd}
                         dragging={!!draggingIds && draggingIds.includes(row.item.id)}

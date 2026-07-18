@@ -81,6 +81,14 @@ body {
   }
 }
 
+/* Touch-narrow rows get a larger (44px) selection target than the 36px default. */
+@container card (max-width: 500px) {
+  .card-checkbox {
+    height: 2.75rem;
+    width: 2.5rem;
+  }
+}
+
 /* ─── Responsive sidebar modes ────────────────────────────────────────────────
    < md            drawer (JS-toggled overlay) — full labels
    md .. lg-1      icons-only rail — labels/counts hidden, count shown as a badge

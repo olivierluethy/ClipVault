@@ -62,20 +62,20 @@ export function BulkActionBar(props: {
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
 
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-bg-raised px-4 py-2 shrink-0">
-      <span className="text-sm font-medium text-fg">{props.count} selected</span>
+    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-bg-raised px-3 py-2 shrink-0 sm:px-4">
+      <span className="shrink-0 text-sm font-medium text-fg">{props.count} selected</span>
       {props.count < props.total && (
         <button
           onClick={props.onSelectAll}
-          className="rounded px-2 py-1 text-sm text-accent hover:underline"
+          className="shrink-0 rounded px-2 py-1 text-sm text-accent hover:underline"
         >
           Select all {props.total}
         </button>
       )}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           onClick={() => setFolderMenuOpen((v) => !v)}
-          className="rounded border border-border px-2 py-1 text-sm text-fg hover:bg-bg-card"
+          className="whitespace-nowrap rounded border border-border px-2 py-1 text-sm text-fg hover:bg-bg-card"
         >
           Add to folder ▾
         </button>
@@ -89,13 +89,13 @@ export function BulkActionBar(props: {
       </div>
       <button
         onClick={props.onDelete}
-        className="rounded border border-border px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-red-400"
+        className="shrink-0 whitespace-nowrap rounded border border-border px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-red-400"
       >
         Delete selected
       </button>
       <button
         onClick={props.onClear}
-        className="ml-auto rounded px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
+        className="ml-auto shrink-0 whitespace-nowrap rounded px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
       >
         Clear selection
       </button>
