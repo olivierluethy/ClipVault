@@ -122,5 +122,10 @@ export const qrSvg = (text: string) => invoke<string>("qr_svg", { text });
 /** Open a captured link in the user's default browser. */
 export const openUrl = (url: string) => invoke<void>("open_url", { url });
 
+/** The global hotkey that opens ClipVault (accelerator string, e.g. "Ctrl+Alt+V"). */
+export const getHotkey = () => invoke<string>("get_hotkey");
+/** Re-register + persist the global open-hotkey. Rejects if it can't be registered. */
+export const setHotkey = (hotkey: string) => invoke<void>("set_hotkey", { hotkey });
+
 /** Hide the main window to the tray (used after Enter-to-copy in the speed workflow). */
 export const hideWindow = () => getCurrentWindow().hide();

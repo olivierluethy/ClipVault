@@ -149,7 +149,7 @@ function FolderMenu(props: {
   );
 }
 
-type LinkMetadata = { title?: string; favicon_url?: string };
+type LinkMetadata = { title?: string; favicon_url?: string; image_url?: string };
 
 function parseLinkMetadata(metadata: string | null): LinkMetadata | null {
   if (!metadata) return null;
@@ -181,7 +181,18 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
   if (item.item_type === "link") {
     return (
       <span className="flex min-w-0 flex-1 items-center gap-2.5">
-        {linkMeta?.favicon_url ? (
+        {linkMeta?.image_url ? (
+          // Rich preview: the page's Open Graph / Twitter-card image as a small
+          // thumbnail. If it fails to load we just hide it (no favicon fallback)
+          // so a broken image never clutters the row.
+          <img
+            src={linkMeta.image_url}
+            alt=""
+            draggable={false}
+            className="h-9 w-12 shrink-0 rounded-md border border-border object-cover"
+            onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+          />
+        ) : linkMeta?.favicon_url ? (
           <img
             src={linkMeta.favicon_url}
             alt=""

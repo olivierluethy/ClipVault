@@ -50,8 +50,10 @@ export function useKeyboardNav(
         const it = flatItems[sel];
         if (it) actions.edit(it);
       } else if (/^[1-9]$/.test(e.key)) {
+        // Number keys are the "grab and go" shortcut: copy the Nth item and
+        // dismiss the window, matching Enter's copy-and-hide speed workflow.
         const it = flatItems[Number(e.key) - 1];
-        if (it) actions.copy(it);
+        if (it) actions.copyAndHide(it);
       }
     };
     window.addEventListener("keydown", h);

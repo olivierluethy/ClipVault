@@ -537,3 +537,53 @@ pub fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
+
+// ─── Global open-hotkey ─────────────────────────────────────────────────────────
+
+/// The hotkey used when the user hasn't chosen one. Also the fallback in `lib.rs`
+/// if a stored/custom binding fails to register.
+pub const DEFAULT_HOTKEY: &str = "Ctrl+Alt+V";
+
+/// The currently configured global open-hotkey (accelerator string, e.g.
+/// "Ctrl+Alt+V" or "Super+V"). Returns the default if none has been set.
+#[tauri::command]
+pub fn get_hotkey(state: State<AppState>) -> Result<String, String> {
+    Ok(state
+        .storage
+        .get_setting("hotkey")
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| DEFAULT_HOTKEY.to_string()))
+}
+
+/// Re-register the global open-hotkey to `hotkey` and persist it. Unregisters the
+/// old binding first. If the new accelerator is invalid or can't be registered
+/// (e.g. reserved by the desktop environment), the previous binding is restored
+/// and an error is returned so the UI can surface it — the user is never left
+/// without a working hotkey.
+#[tauri::command]
+pub fn set_hotkey(app: tauri::AppHandle, state: State<AppState>, hotkey: String) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let hotkey = hotkey.trim().to_string();
+    if hotkey.is_empty() {
+        return Err("Hotkey must not be empty".to_string());
+    }
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    match gs.register(hotkey.as_str()) {
+        Ok(_) => state
+            .storage
+            .set_setting("hotkey", &hotkey)
+            .map_err(|e| e.to_string()),
+        Err(e) => {
+            // Restore the previously working binding (stored value, else default).
+            let prev = state
+                .storage
+                .get_setting("hotkey")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| DEFAULT_HOTKEY.to_string());
+            let _ = gs.register(prev.as_str());
+            Err(format!("Could not register '{hotkey}': {e}"))
+        }
+    }
+}

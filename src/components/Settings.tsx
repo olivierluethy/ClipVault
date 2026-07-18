@@ -14,6 +14,8 @@ import {
   backupNow,
   exportData,
   importData,
+  getHotkey,
+  setHotkey,
   Stats,
 } from "../api";
 
@@ -96,6 +98,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [backupEnabled, setBackupEnabled] = useState(false);
   const [backupInterval, setBackupInterval] = useState("24");
   const [backupKeep, setBackupKeep] = useState("7");
+  const [hotkey, setHotkeyState] = useState("Ctrl+Alt+V");
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -110,6 +113,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setBackupEnabled((await getSettingStr("backup_enabled")) === "1");
       setBackupInterval(numOr(await getSettingStr("backup_interval_hours"), "24"));
       setBackupKeep(numOr(await getSettingStr("backup_keep"), "7"));
+      setHotkeyState(await getHotkey());
       setStats(await getStats());
     })();
   }, []);
@@ -156,6 +160,18 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       flash(`Backup saved: ${path}`);
     } catch (e) {
       flash(`Backup failed: ${e}`);
+    }
+  };
+
+  const changeHotkey = async (accel: string) => {
+    const prev = hotkey;
+    setHotkeyState(accel); // optimistic
+    try {
+      await setHotkey(accel);
+      flash(`Shortcut set to ${accel}.`);
+    } catch (e) {
+      setHotkeyState(prev); // registration failed — revert
+      flash(`${e}`);
     }
   };
 
@@ -233,6 +249,41 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
                 setAutostart(v);
               }}
             />
+          </Section>
+
+          <Section title="Shortcut">
+            <div className="flex flex-col gap-2 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex flex-col">
+                  <span className="text-sm text-fg">Open ClipVault hotkey</span>
+                  <span className="text-xs text-fg-muted">
+                    Global shortcut to bring up the window from anywhere.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg">
+                  {hotkey}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {["Ctrl+Alt+V", "Super+V", "Ctrl+Shift+V", "Super+Shift+V"].map((accel) => (
+                  <button
+                    key={accel}
+                    onClick={() => changeHotkey(accel)}
+                    className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
+                      hotkey === accel
+                        ? "border-accent bg-accent-dim/40 text-fg"
+                        : "border-border text-fg-muted hover:text-fg hover:border-accent"
+                    }`}
+                  >
+                    {accel}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-fg-muted">
+                Some combos (e.g. Super+V) may be reserved by your desktop; if one can't
+                be registered it reverts to the previous shortcut.
+              </span>
+            </div>
           </Section>
 
           <Section title="Retention">

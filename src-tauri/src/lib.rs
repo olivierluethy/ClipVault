@@ -63,9 +63,11 @@ pub fn run() {
             None,
         ))
         .plugin(
+            // No fixed shortcut here: the actual hotkey is read from settings and
+            // registered in setup() (so it's user-configurable at runtime via the
+            // set_hotkey IPC command). This handler fires for whichever shortcut is
+            // currently registered.
             tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut("Ctrl+Alt+V")
-                .expect("valid shortcut")
                 .with_handler(|app, _shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         if let Some(w) = app.get_webview_window("main") {
@@ -103,6 +105,20 @@ pub fn run() {
                 last_self_copy: last_self_copy.clone(),
                 writer,
             });
+
+            // Register the global open-hotkey from settings (default Ctrl+Alt+V). If
+            // a stored/custom binding can't be registered (invalid, or reserved by the
+            // desktop environment — e.g. Super+V on some GNOME setups), fall back to
+            // the default so the user is never left without a way to open the window.
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                let hotkey = storage
+                    .get_setting("hotkey")?
+                    .unwrap_or_else(|| crate::ipc::DEFAULT_HOTKEY.to_string());
+                if app.global_shortcut().register(hotkey.as_str()).is_err() {
+                    let _ = app.global_shortcut().register(crate::ipc::DEFAULT_HOTKEY);
+                }
+            }
 
             // Enable autostart on first run only; respects a user's later choice to disable it.
             {
@@ -310,6 +326,8 @@ pub fn run() {
             crate::ipc::import_data,
             crate::ipc::qr_svg,
             crate::ipc::open_url,
+            crate::ipc::get_hotkey,
+            crate::ipc::set_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");
