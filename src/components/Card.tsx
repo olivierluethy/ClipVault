@@ -1,8 +1,11 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { FolderDto, Item } from "../api";
+import { Popover, MenuItem } from "./Popover";
 
 function FolderMenu(props: {
+  anchorEl: HTMLElement | null;
+  open: boolean;
   folders: FolderDto[];
   onClose: () => void;
   loadMemberships: (itemId: string) => Promise<string[]>;
@@ -11,34 +14,18 @@ function FolderMenu(props: {
   itemId: string;
 }) {
   const [memberIds, setMemberIds] = useState<string[] | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!props.open) return;
     let cancelled = false;
+    setMemberIds(null);
     props.loadMemberships(props.itemId).then((ids) => {
       if (!cancelled) setMemberIds(ids);
     });
     return () => {
       cancelled = true;
     };
-  }, [props.itemId, props.loadMemberships]);
-
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        props.onClose();
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
-    };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [props.onClose]);
+  }, [props.open, props.itemId, props.loadMemberships]);
 
   const handleNewFolder = () => {
     const name = window.prompt("New folder name");
@@ -48,10 +35,13 @@ function FolderMenu(props: {
   };
 
   return (
-    <div
-      ref={menuRef}
-      onClick={(e) => e.stopPropagation()}
-      className="absolute right-0 top-full mt-1 z-20 w-56 max-h-64 overflow-y-auto rounded border border-border bg-bg-raised shadow-lg p-1"
+    <Popover
+      anchorEl={props.anchorEl}
+      open={props.open}
+      onClose={props.onClose}
+      width={224}
+      menu={false}
+      className="z-[100] max-h-64 overflow-y-auto rounded-lg border border-border bg-bg-raised shadow-2xl shadow-black/40 p-1"
     >
       {memberIds === null ? (
         <div className="px-2 py-1.5 text-xs text-fg-muted">Loading…</div>
@@ -65,7 +55,7 @@ function FolderMenu(props: {
             return (
               <label
                 key={f.id}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-card cursor-pointer"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg hover:bg-bg-card cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -73,15 +63,11 @@ function FolderMenu(props: {
                   onChange={(e) => {
                     const next = e.target.checked;
                     setMemberIds((ids) =>
-                      ids
-                        ? next
-                          ? [...ids, f.id]
-                          : ids.filter((id) => id !== f.id)
-                        : ids
+                      ids ? (next ? [...ids, f.id] : ids.filter((id) => id !== f.id)) : ids
                     );
                     props.onToggleFolder(f.id, next);
                   }}
-                  className="shrink-0"
+                  className="shrink-0 accent-accent"
                 />
                 <span className="flex-1 truncate">{f.name}</span>
               </label>
@@ -91,12 +77,12 @@ function FolderMenu(props: {
       )}
       <button
         onClick={handleNewFolder}
-        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
+        className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
       >
         <span aria-hidden>＋</span>
         <span>New folder…</span>
       </button>
-    </div>
+    </Popover>
   );
 }
 
@@ -111,58 +97,6 @@ function parseLinkMetadata(metadata: string | null): LinkMetadata | null {
   } catch {
     return null;
   }
-}
-
-function CopyMenu(props: {
-  onClose: () => void;
-  onCleanCopy: () => void;
-  onPlainCopy: () => void;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        props.onClose();
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
-    };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [props.onClose]);
-
-  return (
-    <div
-      ref={menuRef}
-      onClick={(e) => e.stopPropagation()}
-      className="absolute right-0 top-full mt-1 z-20 w-44 rounded border border-border bg-bg-raised shadow-lg p-1"
-    >
-      <button
-        onClick={() => {
-          props.onCleanCopy();
-          props.onClose();
-        }}
-        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-card text-left"
-      >
-        Clean copy
-      </button>
-      <button
-        onClick={() => {
-          props.onPlainCopy();
-          props.onClose();
-        }}
-        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-card text-left"
-      >
-        Copy as plain text
-      </button>
-    </div>
-  );
 }
 
 export function Card(props: {
@@ -198,10 +132,10 @@ export function Card(props: {
   const [draft, setDraft] = useState(item.content ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
-  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const folderBtnRef = useRef<HTMLButtonElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
   const linkMeta = item.item_type === "link" ? parseLinkMetadata(item.metadata) : null;
-  // Text/number/link content is shown truncated in the row — always offer a full-value
-  // view (the row can't show large values in their entirety).
   const canViewFull =
     (item.item_type === "text" || item.item_type === "number" || item.item_type === "link") &&
     !!item.content;
@@ -216,9 +150,7 @@ export function Card(props: {
 
   if (editing) {
     return (
-      <div
-        className="bg-bg-card border border-accent rounded p-3 flex flex-col gap-2"
-      >
+      <div className="bg-bg-card border border-accent rounded p-3 flex flex-col gap-2">
         <textarea
           ref={textareaRef}
           value={draft}
@@ -317,66 +249,6 @@ export function Card(props: {
             <span aria-hidden>⧉</span>
             <span>Copy</span>
           </button>
-          <div className="relative">
-            <button
-              title="More copy options"
-              aria-label="More copy options"
-              aria-haspopup="true"
-              aria-expanded={copyMenuOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                setCopyMenuOpen((v) => !v);
-              }}
-              className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${copyMenuOpen ? "text-accent" : "text-fg-muted"}`}
-            >
-              ⋯
-            </button>
-            {copyMenuOpen && (
-              <CopyMenu
-                onCleanCopy={props.onCleanCopy}
-                onPlainCopy={props.onPlainCopy}
-                onClose={() => setCopyMenuOpen(false)}
-              />
-            )}
-          </div>
-          <button
-            title={item.pinned ? "Unpin" : "Pin"}
-            aria-label={item.pinned ? "Unpin" : "Pin"}
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onPin();
-            }}
-            className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${item.pinned ? "text-accent" : "text-fg-muted"}`}
-          >
-            📌
-          </button>
-          <div className="relative">
-            <button
-              title="Add to folder"
-              aria-label="Add to folder"
-              aria-haspopup="true"
-              aria-expanded={folderMenuOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                setFolderMenuOpen((v) => !v);
-              }}
-              className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${folderMenuOpen ? "text-accent" : "text-fg-muted"}`}
-            >
-              📁
-            </button>
-            {folderMenuOpen && (
-              <FolderMenu
-                itemId={item.id}
-                folders={props.folders}
-                loadMemberships={props.loadMemberships}
-                onToggleFolder={props.onToggleFolder}
-                onCreateAndAssign={(name) => {
-                  props.onCreateAndAssign(name);
-                }}
-                onClose={() => setFolderMenuOpen(false)}
-              />
-            )}
-          </div>
           {item.item_type === "link" && (
             <button
               title="Open in default browser"
@@ -416,6 +288,41 @@ export function Card(props: {
               ▦
             </button>
           )}
+          <button
+            title={item.pinned ? "Unpin" : "Pin"}
+            aria-label={item.pinned ? "Unpin" : "Pin"}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onPin();
+            }}
+            className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${item.pinned ? "text-accent" : "text-fg-muted"}`}
+          >
+            📌
+          </button>
+          <button
+            ref={folderBtnRef}
+            title="Add to folder"
+            aria-label="Add to folder"
+            aria-haspopup="true"
+            aria-expanded={folderMenuOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              setFolderMenuOpen((v) => !v);
+            }}
+            className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${folderMenuOpen ? "text-accent" : "text-fg-muted"}`}
+          >
+            📁
+          </button>
+          <FolderMenu
+            anchorEl={folderBtnRef.current}
+            open={folderMenuOpen}
+            itemId={item.id}
+            folders={props.folders}
+            loadMemberships={props.loadMemberships}
+            onToggleFolder={props.onToggleFolder}
+            onCreateAndAssign={props.onCreateAndAssign}
+            onClose={() => setFolderMenuOpen(false)}
+          />
           {contentBased && (
             <button
               title="Edit"
@@ -440,6 +347,80 @@ export function Card(props: {
           >
             🗑
           </button>
+          {/* Overflow menu (portal-rendered so it never clips behind the list). */}
+          <button
+            ref={moreBtnRef}
+            title="More actions"
+            aria-label="More actions"
+            aria-haspopup="menu"
+            aria-expanded={moreMenuOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMoreMenuOpen((v) => !v);
+            }}
+            className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${moreMenuOpen ? "text-accent" : "text-fg-muted"}`}
+          >
+            ⋯
+          </button>
+          <Popover
+            anchorEl={moreBtnRef.current}
+            open={moreMenuOpen}
+            onClose={() => setMoreMenuOpen(false)}
+            width={200}
+          >
+            {contentBased && (
+              <MenuItem
+                icon="✨"
+                onClick={() => {
+                  props.onCleanCopy();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                Clean copy
+              </MenuItem>
+            )}
+            {contentBased && (
+              <MenuItem
+                icon="¶"
+                onClick={() => {
+                  props.onPlainCopy();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                Copy as plain text
+              </MenuItem>
+            )}
+            <MenuItem
+              icon="📌"
+              onClick={() => {
+                props.onPin();
+                setMoreMenuOpen(false);
+              }}
+            >
+              {item.pinned ? "Unpin" : "Pin"}
+            </MenuItem>
+            {canViewFull && (
+              <MenuItem
+                icon="👁"
+                onClick={() => {
+                  props.onExpandText();
+                  setMoreMenuOpen(false);
+                }}
+              >
+                View full value
+              </MenuItem>
+            )}
+            <MenuItem
+              icon="🗑"
+              danger
+              onClick={() => {
+                props.onDelete();
+                setMoreMenuOpen(false);
+              }}
+            >
+              Delete
+            </MenuItem>
+          </Popover>
         </div>
       </div>
     </div>
