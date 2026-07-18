@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ClipVault
+{{#if comment}}Comment={{comment}}{{/if}}
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories={{categories}}
+Keywords=clipboard;history;copy;paste;snippets;
+StartupWMClass=clipvault
+StartupNotify=true

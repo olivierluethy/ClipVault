@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ClipVault",
+  "productName": "clipvault",
   "version": "0.1.0",
   "identifier": "net.gmx.clipvault",
   "build": {
@@ -33,15 +33,27 @@
     "shortDescription": "Clipboard history manager",
     "longDescription": "ClipVault keeps a searchable history of what you copy — text, links, colors, numbers, and images — with folders, pinning, privacy mode, retention, and backups.",
     "icon": [
+      "icons/16x16.png",
+      "icons/24x24.png",
       "icons/32x32.png",
+      "icons/48x48.png",
+      "icons/64x64.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ],
     "linux": {
       "deb": {
-        "depends": ["libxcb1", "libxcb-render0", "libxcb-shape0", "libxcb-xfixes0"]
+        "depends": ["libxcb1", "libxcb-render0", "libxcb-shape0", "libxcb-xfixes0"],
+        "desktopTemplate": "linux/clipvault.desktop",
+        "postInstallScript": "linux/postinst.sh",
+        "postRemoveScript": "linux/postrm.sh",
+        "files": {
+          "/usr/share/icons/hicolor/scalable/apps/clipvault.svg": "icons/clipvault-icon.svg"
+        }
       }
     }
   }
