@@ -66,7 +66,7 @@ impl Storage {
 
         if let Some(id) = existing {
             conn.execute(
-                "UPDATE items SET copy_count = copy_count + 1, created_at = ?1, updated_at = ?1 WHERE id = ?2",
+                "UPDATE items SET copy_count = copy_count + 1, created_at = ?1, updated_at = ?1, deleted_at = NULL WHERE id = ?2",
                 params![now, id],
             )?;
             return Ok(InsertOutcome::Bumped(id));
@@ -266,6 +266,20 @@ mod tests {
         let conn = s.conn.lock().unwrap();
         let n: i64 = conn.query_row("SELECT count(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn recopy_undeletes_soft_deleted_item() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,content_hash:"hz".into()}, 100).unwrap();
+        let id = s.list_items(10, None, None).unwrap()[0].id.clone();
+        s.soft_delete(&id, 200).unwrap();
+        assert_eq!(s.list_items(10, None, None).unwrap().len(), 0); // hidden
+        // re-copy same content -> should reappear (un-deleted) and bump
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,content_hash:"hz".into()}, 300).unwrap();
+        let rows = s.list_items(10, None, None).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].copy_count >= 2);
     }
 
     #[test]
