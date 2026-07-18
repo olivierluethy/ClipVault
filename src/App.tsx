@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Item, listRecent, getPrivacy, setPrivacy, onItemAdded, onPrivacyChanged } from "./api";
+import { Item, listItems, getPrivacy, setPrivacy, onItemAdded, onPrivacyChanged } from "./api";
 
 export default function App() {
   const [items, setItems] = useState<Item[]>([]);
   const [privacy, setPriv] = useState(false);
 
-  const refresh = () => listRecent().then(setItems);
+  const refresh = () => listItems().then(setItems);
 
   useEffect(() => {
     refresh();

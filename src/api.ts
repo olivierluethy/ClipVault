@@ -6,11 +6,25 @@ export type Item = {
   item_type: "text" | "image" | "gif";
   content: string | null;
   file_path: string | null;
+  preview_path: string | null;
   copy_count: number;
+  pinned: boolean;
   created_at: number;
+  updated_at: number;
 };
 
-export const listRecent = (limit = 200) => invoke<Item[]>("list_recent_items", { limit });
+export const listItems = (limit = 100, beforeCreatedAt?: number, beforeId?: string) =>
+  invoke<Item[]>("list_items", {
+    limit,
+    beforeCreatedAt: beforeCreatedAt ?? null,
+    beforeId: beforeId ?? null,
+  });
+export const listPinned = () => invoke<Item[]>("list_pinned");
+export const copyItem = (id: string) => invoke<void>("copy_item", { id });
+export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
+export const restoreItem = (id: string) => invoke<void>("restore_item", { id });
+export const setPinned = (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned });
+export const updateContent = (id: string, content: string) => invoke<void>("update_content", { id, content });
 export const getPrivacy = () => invoke<boolean>("get_privacy");
 export const setPrivacy = (on: boolean) => invoke<void>("set_privacy", { on });
 export const onItemAdded = (cb: () => void) => listen("item-added", cb);
