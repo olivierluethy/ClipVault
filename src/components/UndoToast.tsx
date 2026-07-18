@@ -4,10 +4,12 @@ export function UndoToast({
   open,
   onUndo,
   onExpire,
+  label = "Item deleted",
 }: {
   open: boolean;
   onUndo: () => void;
   onExpire: () => void;
+  label?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -17,7 +19,7 @@ export function UndoToast({
   if (!open) return null;
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-bg-raised border border-border rounded px-4 py-2 flex items-center gap-3 z-50">
-      <span className="text-sm">Item deleted</span>
+      <span className="text-sm">{label}</span>
       <button onClick={onUndo} className="text-accent text-sm font-medium">
         Undo
       </button>

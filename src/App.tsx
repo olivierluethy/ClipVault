@@ -25,6 +25,7 @@ import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
 import { UndoToast } from "./components/UndoToast";
 import { Sidebar } from "./components/Sidebar";
+import { BulkActionBar } from "./components/BulkActionBar";
 import { useTimeline } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
 
@@ -34,11 +35,13 @@ export default function App() {
   const [privacy, setPriv] = useState(false);
   const [zoom, setZoom] = useState<Item | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [folders, setFolders] = useState<FolderDto[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const parentRef = useRef<HTMLDivElement>(null);
+  const anchorIndexRef = useRef<number | null>(null);
 
   const reloadCounts = useCallback(async () => {
     const list = await folderCounts();
@@ -109,7 +112,7 @@ export default function App() {
   const del = useCallback(
     async (it: Item) => {
       await deleteItem(it.id);
-      setPendingDelete(it);
+      setPendingDeleteIds([it.id]);
       reload();
       reloadCounts();
     },
@@ -160,6 +163,87 @@ export default function App() {
     [reloadFolders, reload]
   );
 
+  const flatIndexById = useMemo(() => {
+    const m = new Map<string, number>();
+    flatItems.forEach((it, i) => m.set(it.id, i));
+    return m;
+  }, [flatItems]);
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectRange = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const start = Math.min(fromIndex, toIndex);
+      const end = Math.max(fromIndex, toIndex);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (let i = start; i <= end; i++) {
+          const it = flatItems[i];
+          if (it) next.add(it.id);
+        }
+        return next;
+      });
+    },
+    [flatItems]
+  );
+
+  const onBodyClick = useCallback(
+    (it: Item, index: number, e: React.MouseEvent) => {
+      if (e.shiftKey && anchorIndexRef.current !== null) {
+        selectRange(anchorIndexRef.current, index);
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) {
+        toggleSelected(it.id);
+        anchorIndexRef.current = index;
+        return;
+      }
+      if (selectedIds.size > 0) {
+        toggleSelected(it.id);
+        anchorIndexRef.current = index;
+        return;
+      }
+      if (index >= 0) setSel(index);
+      copy(it);
+      anchorIndexRef.current = index;
+    },
+    [selectedIds, toggleSelected, selectRange, copy]
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    anchorIndexRef.current = null;
+  }, []);
+
+  const bulkAddToFolder = useCallback(
+    async (folderId: string) => {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map((id) => assignItem(id, folderId)));
+      clearSelection();
+      reloadFolders();
+      reloadCounts();
+      reload();
+    },
+    [selectedIds, clearSelection, reloadFolders, reloadCounts, reload]
+  );
+
+  const bulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => deleteItem(id)));
+    setPendingDeleteIds(ids);
+    clearSelection();
+    reload();
+    reloadCounts();
+  }, [selectedIds, clearSelection, reload, reloadCounts]);
+
   const { sel, setSel } = useKeyboardNav(flatItems, {
     copy,
     del,
@@ -196,12 +280,6 @@ export default function App() {
 
   const isEmpty = rows.length === 0 && pinned.length === 0;
 
-  const flatIndexById = useMemo(() => {
-    const m = new Map<string, number>();
-    flatItems.forEach((it, i) => m.set(it.id, i));
-    return m;
-  }, [flatItems]);
-
   return (
     <div className="h-screen flex">
       <Sidebar
@@ -226,6 +304,16 @@ export default function App() {
           </button>
         </header>
 
+        {selectedIds.size > 0 && (
+          <BulkActionBar
+            count={selectedIds.size}
+            folders={folders}
+            onAddToFolder={bulkAddToFolder}
+            onDelete={bulkDelete}
+            onClear={clearSelection}
+          />
+        )}
+
         {pinned.length > 0 && (
           <section className="p-4 border-b border-border space-y-2 shrink-0">
             <div className="text-xs uppercase text-fg-muted">Pinned</div>
@@ -237,11 +325,13 @@ export default function App() {
                 <Card
                   item={it}
                   selected={sel === i}
+                  multiSelected={selectedIds.has(it.id)}
                   editing={editingId === it.id}
                   folders={folders}
                   loadMemberships={loadMemberships}
                   onToggleFolder={(folderId, checked) => toggleFolder(it, folderId, checked)}
                   onCreateAndAssign={(name) => createAndAssign(it, name)}
+                  onBodyClick={(e) => onBodyClick(it, flatIndexById.get(it.id) ?? i, e)}
                   onCopy={() => {
                     setSel(i);
                     copy(it);
@@ -289,6 +379,7 @@ export default function App() {
                       <Card
                         item={row.item}
                         selected={flatIndex >= 0 && sel === flatIndex}
+                        multiSelected={selectedIds.has(row.item.id)}
                         editing={editingId === row.item.id}
                         folders={folders}
                         loadMemberships={loadMemberships}
@@ -296,6 +387,7 @@ export default function App() {
                           toggleFolder(row.item, folderId, checked)
                         }
                         onCreateAndAssign={(name) => createAndAssign(row.item, name)}
+                        onBodyClick={(e) => onBodyClick(row.item, flatIndex, e)}
                         onCopy={() => copy(row.item)}
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
@@ -315,16 +407,21 @@ export default function App() {
 
       <ZoomModal item={zoom} onClose={() => setZoom(null)} />
       <UndoToast
-        open={!!pendingDelete}
+        open={!!pendingDeleteIds && pendingDeleteIds.length > 0}
+        label={
+          pendingDeleteIds && pendingDeleteIds.length > 1
+            ? `${pendingDeleteIds.length} deleted`
+            : "Item deleted"
+        }
         onUndo={async () => {
-          if (pendingDelete) {
-            await restoreItem(pendingDelete.id);
-            setPendingDelete(null);
+          if (pendingDeleteIds) {
+            await Promise.all(pendingDeleteIds.map((id) => restoreItem(id)));
+            setPendingDeleteIds(null);
             reload();
             reloadCounts();
           }
         }}
-        onExpire={() => setPendingDelete(null)}
+        onExpire={() => setPendingDeleteIds(null)}
       />
     </div>
   );

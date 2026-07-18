@@ -103,11 +103,13 @@ function FolderMenu(props: {
 export function Card(props: {
   item: Item;
   selected: boolean;
+  multiSelected: boolean;
   editing: boolean;
   folders: FolderDto[];
   loadMemberships: (itemId: string) => Promise<string[]>;
   onToggleFolder: (folderId: string, checked: boolean) => void;
   onCreateAndAssign: (name: string) => void;
+  onBodyClick: (e: React.MouseEvent) => void;
   onCopy: () => void;
   onDelete: () => void;
   onPin: () => void;
@@ -116,7 +118,7 @@ export function Card(props: {
   onSaveEdit: (content: string) => void;
   onCancelEdit: () => void;
 }) {
-  const { item, selected, editing } = props;
+  const { item, selected, multiSelected, editing } = props;
   const thumb = item.preview_path ?? item.file_path;
   const contentBased =
     item.item_type === "text" ||
@@ -164,10 +166,19 @@ export function Card(props: {
 
   return (
     <div
-      onClick={props.onCopy}
-      className={`group bg-bg-card border rounded p-3 flex gap-3 items-center cursor-pointer
-        ${selected ? "border-accent" : "border-border"}`}
+      onClick={props.onBodyClick}
+      className={`group relative bg-bg-card border rounded p-3 flex gap-3 items-center cursor-pointer
+        ${selected ? "border-accent" : "border-border"}
+        ${multiSelected ? "ring-2 ring-accent bg-accent-dim/20" : ""}`}
     >
+      {multiSelected && (
+        <span
+          aria-hidden
+          className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] leading-none text-bg-raised"
+        >
+          ✓
+        </span>
+      )}
       <span className="text-xs uppercase text-accent w-12 shrink-0">{item.item_type}</span>
       {item.item_type === "color" ? (
         <span className="flex items-center gap-2 truncate text-sm flex-1">
