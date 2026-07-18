@@ -4,6 +4,7 @@ use rusqlite::Connection;
 
 mod items;
 pub use items::*;
+mod settings;
 
 pub struct Storage {
     pub(crate) conn: Mutex<Connection>,
