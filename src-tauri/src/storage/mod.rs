@@ -49,7 +49,14 @@ impl Storage {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
-        Ok(Storage { conn: Mutex::new(conn), root })
+        let s = Storage { conn: Mutex::new(conn), root };
+        if let Ok(purged) = s.purge_deleted() {
+            for (fp, pp) in purged {
+                if let Some(p) = fp { let _ = std::fs::remove_file(p); }
+                if let Some(p) = pp { let _ = std::fs::remove_file(p); }
+            }
+        }
+        Ok(s)
     }
 
     pub fn attachments_dir(&self) -> PathBuf {

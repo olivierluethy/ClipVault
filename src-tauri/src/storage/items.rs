@@ -137,6 +137,37 @@ impl Storage {
         )?;
         Ok(())
     }
+
+    // Wired to an IPC command in a later task; exercised directly by tests until then.
+    #[allow(dead_code)]
+    pub fn soft_delete(&self, id: &str, now: i64) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(())
+    }
+
+    // Wired to an IPC command in a later task; exercised directly by tests until then.
+    #[allow(dead_code)]
+    pub fn restore(&self, id: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE items SET deleted_at = NULL WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Deletes rows already soft-deleted, returning their (file_path, preview_path)
+    /// so the caller can remove the backing files. Called from `Storage::open` on startup.
+    pub fn purge_deleted(&self) -> rusqlite::Result<Vec<(Option<String>, Option<String>)>> {
+        let conn = self.conn.lock().unwrap();
+        let files: Vec<(Option<String>, Option<String>)> = conn
+            .prepare("SELECT file_path, preview_path FROM items WHERE deleted_at IS NOT NULL")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        conn.execute("DELETE FROM items WHERE deleted_at IS NOT NULL", [])?;
+        Ok(files)
+    }
 }
 
 #[cfg(test)]
@@ -217,6 +248,24 @@ mod tests {
         }
         seen.sort();
         assert_eq!(seen, vec!["a","b","c"]);  // all three retrieved, none skipped
+    }
+
+    #[test]
+    fn soft_delete_hides_then_restore_then_purge() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("x".into()),file_path:None,content_hash:"hx".into()},100).unwrap();
+        let id = s.list_items(10, None, None).unwrap()[0].id.clone();
+        s.soft_delete(&id, 500).unwrap();
+        assert_eq!(s.list_items(10, None, None).unwrap().len(), 0);   // hidden
+        s.restore(&id).unwrap();
+        assert_eq!(s.list_items(10, None, None).unwrap().len(), 1);   // back
+        s.soft_delete(&id, 600).unwrap();
+        let purged = s.purge_deleted().unwrap();
+        assert_eq!(purged.len(), 1);
+        // row is gone entirely now
+        let conn = s.conn.lock().unwrap();
+        let n: i64 = conn.query_row("SELECT count(*) FROM items", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 
     #[test]
