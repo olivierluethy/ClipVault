@@ -2,6 +2,8 @@ mod hashing;
 mod storage;
 mod classifier;
 mod watcher;
+mod capture;
+mod state;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
