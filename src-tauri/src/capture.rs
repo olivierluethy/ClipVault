@@ -24,13 +24,18 @@ pub fn process_event(
     let hash = sha256_hex(&ev.bytes);
 
     // Self-copy suppression: if this hash matches what the app itself just copied
-    // to the clipboard, skip re-capturing it (one-shot marker).
+    // back to the clipboard, skip re-capturing it. The marker is NOT one-shot:
+    // a single copy-back can produce several clipboard-change events (the OS/DE
+    // clipboard manager re-asserts ownership), so we must ignore ALL echoes of
+    // that content. The marker is cleared only when genuinely different content
+    // is copied (below), so a later real re-copy of the same value still lands.
     {
         let mut guard = self_copy.lock().unwrap();
         if guard.as_deref() == Some(hash.as_str()) {
-            *guard = None; // consume the one-shot marker
             return Ok(None);
         }
+        // Different clipboard content — clear any stale self-copy marker.
+        *guard = None;
     }
 
     let now = chrono_now_millis();
@@ -170,16 +175,31 @@ mod tests {
     }
 
     #[test]
-    fn self_copy_marker_suppresses_capture() {
+    fn self_copy_marker_suppresses_all_echoes() {
         let (_d, s) = storage();
         let bytes = b"self-copied text".to_vec();
         let hash = sha256_hex(&bytes);
-        let marker = std::sync::Mutex::new(Some(hash));
+        let marker = std::sync::Mutex::new(Some(hash.clone()));
 
-        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes }, &marker).unwrap();
-
+        // First echo: suppressed.
+        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: bytes.clone() }, &marker).unwrap();
         assert!(out.is_none(), "self-copy should be suppressed, not stored");
-        assert_eq!(s.list_recent(10).unwrap().len(), 0, "nothing should be persisted");
-        assert_eq!(*marker.lock().unwrap(), None, "one-shot marker should be consumed");
+        assert_eq!(*marker.lock().unwrap(), Some(hash), "marker must persist to suppress repeated echoes");
+
+        // Second echo of the SAME content (clipboard manager re-asserts): also suppressed.
+        let out2 = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes }, &marker).unwrap();
+        assert!(out2.is_none(), "repeated echo of self-copy must also be suppressed");
+        assert_eq!(s.list_recent(10).unwrap().len(), 0, "nothing should be persisted from echoes");
+    }
+
+    #[test]
+    fn different_content_clears_marker_and_captures() {
+        let (_d, s) = storage();
+        let marker = std::sync::Mutex::new(Some(sha256_hex(b"OUR COPY")));
+        // A genuinely different clipboard change clears the marker and is captured.
+        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: b"something else".to_vec() }, &marker).unwrap();
+        assert!(matches!(out, Some(InsertOutcome::Inserted(_))));
+        assert_eq!(*marker.lock().unwrap(), None, "different content should clear the stale marker");
+        assert_eq!(s.list_recent(10).unwrap().len(), 1);
     }
 }

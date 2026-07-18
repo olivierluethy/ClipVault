@@ -66,12 +66,18 @@ pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
     // Suppress the echo BEFORE writing, so the watcher thread ignores our own copy-back.
     *state.last_self_copy.lock().unwrap() = Some(hash);
-    let req = if ty == "text" {
-        WriteRequest { mime: "UTF8_STRING".into(), bytes: content.unwrap_or_default().into_bytes() }
-    } else {
-        let bytes = std::fs::read(file_path.ok_or("missing file")?).map_err(|e| e.to_string())?;
-        let mime = if ty == "gif" { "image/gif" } else { "image/png" };
-        WriteRequest { mime: mime.into(), bytes }
+    // Content-based items (text/link/number/color) have no file and are written as
+    // UTF8_STRING; only image/gif are written from their file bytes.
+    let req = match file_path {
+        None => WriteRequest {
+            mime: "UTF8_STRING".into(),
+            bytes: content.unwrap_or_default().into_bytes(),
+        },
+        Some(path) => {
+            let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+            let mime = if ty == "gif" { "image/gif" } else { "image/png" };
+            WriteRequest { mime: mime.into(), bytes }
+        }
     };
     state.writer.send(req).map_err(|e| e.to_string())
 }
