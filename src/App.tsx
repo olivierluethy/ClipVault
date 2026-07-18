@@ -77,7 +77,7 @@ export default function App() {
   );
 
   const edit = useCallback((it: Item) => {
-    if (it.item_type === "text") setEditingId(it.id);
+    if (["text", "link", "number", "color"].includes(it.item_type)) setEditingId(it.id);
   }, []);
 
   const saveEdit = useCallback(

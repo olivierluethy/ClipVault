@@ -16,6 +16,11 @@ export function Card(props: {
 }) {
   const { item, selected, editing } = props;
   const thumb = item.preview_path ?? item.file_path;
+  const contentBased =
+    item.item_type === "text" ||
+    item.item_type === "link" ||
+    item.item_type === "number" ||
+    item.item_type === "color";
   const [draft, setDraft] = useState(item.content ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -88,36 +93,52 @@ export function Card(props: {
       )}
       <div className="ml-auto flex items-center gap-2 shrink-0">
         <span className="text-xs text-fg-muted">×{item.copy_count}</span>
-        <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex gap-1">
+        <div className="flex items-center gap-1">
+          {/* Copy is the primary action — always visible and clearly labelled. */}
           <button
-            title="Pin"
+            title="Copy to clipboard"
+            aria-label="Copy to clipboard"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onCopy();
+            }}
+            className="flex items-center gap-1 rounded border border-accent/60 bg-accent-dim/40 px-2 py-1 text-xs text-fg hover:bg-accent-dim"
+          >
+            <span aria-hidden>⧉</span>
+            <span>Copy</span>
+          </button>
+          <button
+            title={item.pinned ? "Unpin" : "Pin"}
+            aria-label={item.pinned ? "Unpin" : "Pin"}
             onClick={(e) => {
               e.stopPropagation();
               props.onPin();
             }}
-            className={`text-xs px-1 ${item.pinned ? "text-accent" : "text-fg-muted"}`}
+            className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${item.pinned ? "text-accent" : "text-fg-muted"}`}
           >
             📌
           </button>
-          {item.item_type === "text" && (
+          {contentBased && (
             <button
               title="Edit"
+              aria-label="Edit"
               onClick={(e) => {
                 e.stopPropagation();
                 props.onStartEdit();
               }}
-              className="text-xs px-1 text-fg-muted hover:text-accent"
+              className="rounded px-1.5 py-1 text-sm text-fg-muted hover:bg-bg-raised hover:text-accent"
             >
               ✏️
             </button>
           )}
           <button
             title="Delete"
+            aria-label="Delete"
             onClick={(e) => {
               e.stopPropagation();
               props.onDelete();
             }}
-            className="text-xs px-1 text-fg-muted hover:text-red-400"
+            className="rounded px-1.5 py-1 text-sm text-fg-muted hover:bg-bg-raised hover:text-red-400"
           >
             🗑
           </button>
