@@ -9,6 +9,7 @@ mod ipc;
 mod thumbnail;
 mod clipboard_writer;
 mod link_meta;
+mod qr;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -76,6 +77,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
@@ -186,6 +188,20 @@ pub fn run() {
                 }
             });
 
+            // Background maintenance: enforce retention limits and take scheduled
+            // backups. Reads its cadence/limits from settings each pass so changes in
+            // the Settings screen take effect without a restart. Runs every 30 min
+            // (plus once shortly after launch).
+            let storage_m = storage.clone();
+            std::thread::spawn(move || {
+                // Small initial delay so startup isn't competing with first-paint work.
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                loop {
+                    run_maintenance(&storage_m);
+                    std::thread::sleep(std::time::Duration::from_secs(30 * 60));
+                }
+            });
+
             // Tray icon with Open / Toggle Privacy Mode / Quit menu.
             use tauri::menu::{CheckMenuItem, Menu, MenuItem};
             use tauri::tray::TrayIconBuilder;
@@ -280,7 +296,66 @@ pub fn run() {
             crate::ipc::quick_add,
             crate::ipc::get_fetch_link_metadata,
             crate::ipc::set_fetch_link_metadata,
+            crate::ipc::get_setting_str,
+            crate::ipc::set_setting_str,
+            crate::ipc::get_autostart,
+            crate::ipc::set_autostart,
+            crate::ipc::set_privacy_timed,
+            crate::ipc::get_stats,
+            crate::ipc::backup_now,
+            crate::ipc::export_data,
+            crate::ipc::import_data,
+            crate::ipc::qr_svg,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");
+}
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
+
+/// One maintenance pass: apply retention limits, then take a scheduled backup if one is
+/// due. All parameters come from settings (written by the Settings screen); a `0`/unset
+/// limit disables that rule. Best-effort — logs nothing on the happy path.
+fn run_maintenance(storage: &crate::storage::Storage) {
+    let now = now_ms();
+
+    // Retention: days -> ms, and a max item count. 0/unset disables each.
+    let days: i64 = storage.get_setting("retention_days").ok().flatten()
+        .and_then(|v| v.parse().ok()).unwrap_or(0);
+    let max_items: i64 = storage.get_setting("retention_max_items").ok().flatten()
+        .and_then(|v| v.parse().ok()).unwrap_or(0);
+    let max_age_ms = if days > 0 { Some(days * 24 * 60 * 60 * 1000) } else { None };
+    let max_items = if max_items > 0 { Some(max_items) } else { None };
+    if max_age_ms.is_some() || max_items.is_some() {
+        if let Ok(removed) = storage.run_retention(max_age_ms, max_items, now) {
+            for (fp, pp) in removed {
+                if let Some(p) = fp { let _ = std::fs::remove_file(p); }
+                if let Some(p) = pp { let _ = std::fs::remove_file(p); }
+            }
+        }
+    }
+
+    // Scheduled backups: only if enabled and the configured interval has elapsed.
+    if storage.get_bool("backup_enabled", false) {
+        let interval_hours: i64 = storage.get_setting("backup_interval_hours").ok().flatten()
+            .and_then(|v| v.parse().ok()).unwrap_or(24);
+        let last: i64 = storage.get_setting("backup_last_at").ok().flatten()
+            .and_then(|v| v.parse().ok()).unwrap_or(0);
+        let due = now - last >= interval_hours.max(1) * 60 * 60 * 1000;
+        if due {
+            let dir = storage.attachments_dir().parent().unwrap().join("backups");
+            if std::fs::create_dir_all(&dir).is_ok() {
+                let dest = dir.join(format!("clipvault-{now}.db"));
+                if storage.backup_to(&dest).is_ok() {
+                    let keep: usize = storage.get_setting("backup_keep").ok().flatten()
+                        .and_then(|v| v.parse().ok()).unwrap_or(7);
+                    crate::ipc::prune_backups(&dir, keep);
+                    let _ = storage.set_setting("backup_last_at", &now.to_string());
+                }
+            }
+        }
+    }
 }

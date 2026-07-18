@@ -70,3 +70,34 @@ export const listItemsInFolder = (
     beforeId: beforeId ?? null,
   });
 export const search = (query: string, limit = 200) => invoke<Item[]>("search", { query, limit });
+
+// ─── Settings / maintenance / export / QR ──────────────────────────────────────
+
+export const getExcludeSecrets = () => invoke<boolean>("get_exclude_secrets");
+export const setExcludeSecrets = (on: boolean) => invoke<void>("set_exclude_secrets", { on });
+export const getFetchLinkMetadata = () => invoke<boolean>("get_fetch_link_metadata");
+export const setFetchLinkMetadata = (on: boolean) => invoke<void>("set_fetch_link_metadata", { on });
+
+export const getSettingStr = (key: string) => invoke<string | null>("get_setting_str", { key });
+export const setSettingStr = (key: string, value: string) =>
+  invoke<void>("set_setting_str", { key, value });
+
+export const getAutostart = () => invoke<boolean>("get_autostart");
+export const setAutostart = (on: boolean) => invoke<void>("set_autostart", { on });
+
+/** Enable Privacy mode now and auto-disable it after `minutes`. */
+export const setPrivacyTimed = (minutes: number) => invoke<void>("set_privacy_timed", { minutes });
+
+export type Stats = { items: number; bytes: number };
+export const getStats = () => invoke<Stats>("get_stats");
+
+/** Write a backup now; returns the backup file path. */
+export const backupNow = () => invoke<string>("backup_now", { stampMs: Date.now() });
+
+/** Export all items to a JSON file; returns the count written. */
+export const exportData = (path: string) => invoke<number>("export_data", { path });
+/** Import items from a ClipVault export JSON; returns the count newly inserted. */
+export const importData = (path: string) => invoke<number>("import_data", { path });
+
+/** Render an item's text/link as a scannable SVG QR code. */
+export const qrSvg = (text: string) => invoke<string>("qr_svg", { text });

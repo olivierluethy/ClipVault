@@ -7,6 +7,8 @@ pub use items::*;
 mod settings;
 mod folders;
 pub use folders::*;
+mod maintenance;
+pub use maintenance::*;
 
 pub struct Storage {
     pub(crate) conn: Mutex<Connection>,
@@ -47,6 +49,17 @@ impl Storage {
         }
 
         let conn = Connection::open(db_path)?;
+        // Encryption-at-rest (opt-in, P3-4): if a passphrase is provided via the
+        // CLIPVAULT_KEY env var, apply it as the SQLCipher key BEFORE any other access.
+        // With the `sqlcipher` cargo feature this encrypts/decrypts the DB; on the
+        // default (plain SQLite) build, `PRAGMA key` is an unknown pragma and is
+        // silently ignored, so this is a safe no-op.
+        if let Ok(key) = std::env::var("CLIPVAULT_KEY") {
+            if !key.is_empty() {
+                let escaped = key.replace('\'', "''");
+                conn.execute_batch(&format!("PRAGMA key = '{escaped}';"))?;
+            }
+        }
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.execute_batch(SCHEMA)?;
@@ -142,6 +155,17 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 6", [])?;
         version = 6;
     }
+    if version < 7 {
+        // Perf: the type-filtered timeline (`list_by_type`) filters on `type` and
+        // orders by (created_at DESC, id DESC); a covering composite index avoids a
+        // full scan + temp-sort as the history grows.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_items_type_created ON items(type, created_at DESC, id DESC)",
+            [],
+        )?;
+        conn.execute("PRAGMA user_version = 7", [])?;
+        version = 7;
+    }
     let _ = version;
     Ok(())
 }
@@ -187,7 +211,7 @@ mod tests {
         {
             let conn = s.conn.lock().unwrap();
             let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(v, 6);
+            assert_eq!(v, 7);
             let cols: Vec<String> = conn
                 .prepare("SELECT name FROM pragma_table_info('items')").unwrap()
                 .query_map([], |r| r.get::<_, String>(0)).unwrap()
@@ -201,7 +225,7 @@ mod tests {
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()
             .query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 6);
+        assert_eq!(v, 7);
     }
 
     #[test]

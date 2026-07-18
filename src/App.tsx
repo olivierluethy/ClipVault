@@ -24,12 +24,16 @@ import {
   unassignItem,
   foldersForItem,
   search,
+  getSettingStr,
+  setSettingStr,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
 import { UndoToast } from "./components/UndoToast";
 import { Sidebar } from "./components/Sidebar";
 import { BulkActionBar } from "./components/BulkActionBar";
+import { Settings } from "./components/Settings";
+import { QrModal } from "./components/QrModal";
 import { useTimeline } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
@@ -39,6 +43,9 @@ export default function App() {
   const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder);
   const [privacy, setPriv] = useState(false);
   const [quickMsg, setQuickMsg] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [qrText, setQrText] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Item[]>([]);
@@ -68,6 +75,18 @@ export default function App() {
     return () => {
       un.then((f) => f());
     };
+  }, []);
+
+  // First-run welcome: show once, then persist the "onboarded" flag.
+  useEffect(() => {
+    getSettingStr("onboarded").then((v) => {
+      if (v !== "1") setShowWelcome(true);
+    });
+  }, []);
+
+  const dismissWelcome = useCallback(() => {
+    setShowWelcome(false);
+    setSettingStr("onboarded", "1");
   }, []);
 
   useEffect(() => {
@@ -414,6 +433,14 @@ export default function App() {
           >
             {privacy ? "Privacy: ON" : "Privacy: OFF"}
           </button>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            aria-label="Settings"
+            className="px-2 py-1 rounded border border-border text-sm shrink-0 text-fg-muted hover:text-fg hover:border-accent"
+          >
+            ⚙
+          </button>
         </header>
 
         {isSearching && (
@@ -470,6 +497,7 @@ export default function App() {
                   onDelete={() => del(it)}
                   onPin={() => pin(it)}
                   onZoom={() => setZoom(it)}
+                  onQr={() => setQrText(it.content ?? "")}
                   onStartEdit={() => setEditingId(it.id)}
                   onSaveEdit={(c) => saveEdit(it.id, c)}
                   onCancelEdit={() => setEditingId(null)}
@@ -529,6 +557,7 @@ export default function App() {
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
                         onZoom={() => setZoom(row.item)}
+                        onQr={() => setQrText(row.item.content ?? "")}
                         onStartEdit={() => setEditingId(row.item.id)}
                         onSaveEdit={(c) => saveEdit(row.item.id, c)}
                         onCancelEdit={() => setEditingId(null)}
@@ -545,6 +574,40 @@ export default function App() {
       {quickMsg && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg border border-border bg-bg-raised text-sm text-fg shadow-lg">
           {quickMsg}
+        </div>
+      )}
+
+      {settingsOpen && (
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          onPrivacyTimed={() => setPriv(true)}
+        />
+      )}
+
+      <QrModal text={qrText} onClose={() => setQrText(null)} />
+
+      {showWelcome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
+          <div className="w-full max-w-md rounded-xl border border-border bg-bg-raised p-6 shadow-2xl space-y-3">
+            <h2 className="text-lg font-semibold">Welcome to ClipVault 📋</h2>
+            <p className="text-sm text-fg-muted">
+              ClipVault quietly saves what you copy — text, links, colors, numbers, and
+              images — so you can find and reuse it later.
+            </p>
+            <ul className="text-sm text-fg-muted space-y-1 list-disc pl-5">
+              <li>Press <span className="text-fg font-medium">Ctrl+Alt+V</span> anytime to open it.</li>
+              <li>Use <span className="text-fg font-medium">Privacy</span> to pause capture; <span className="text-fg font-medium">+ Add current</span> saves one item on demand.</li>
+              <li><span className="text-fg font-medium">Ctrl+F</span> searches; the <span className="text-fg font-medium">⚙</span> menu has retention, backups, and export.</li>
+            </ul>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={dismissWelcome}
+                className="rounded border border-accent bg-accent-dim/40 px-4 py-1.5 text-sm text-fg hover:bg-accent-dim"
+              >
+                Get started
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

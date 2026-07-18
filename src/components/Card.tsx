@@ -181,6 +181,7 @@ export function Card(props: {
   onDelete: () => void;
   onPin: () => void;
   onZoom: () => void;
+  onQr: () => void;
   onStartEdit: () => void;
   onSaveEdit: (content: string) => void;
   onCancelEdit: () => void;
@@ -369,6 +370,19 @@ export function Card(props: {
               />
             )}
           </div>
+          {contentBased && (
+            <button
+              title="Show QR code"
+              aria-label="Show QR code"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onQr();
+              }}
+              className="rounded px-1.5 py-1 text-sm text-fg-muted hover:bg-bg-raised hover:text-accent"
+            >
+              ▦
+            </button>
+          )}
           {contentBased && (
             <button
               title="Edit"
