@@ -14,7 +14,14 @@ pub fn get_privacy(state: State<AppState>) -> bool {
 }
 
 #[tauri::command]
-pub fn set_privacy(state: State<AppState>, on: bool) -> Result<(), String> {
+pub fn set_privacy(
+    state: State<AppState>,
+    privacy_menu: State<crate::PrivacyMenu>,
+    on: bool,
+) -> Result<(), String> {
     state.privacy.store(on, Ordering::Relaxed);
-    state.storage.set_bool("privacy_mode", on).map_err(|e| e.to_string())
+    state.storage.set_bool("privacy_mode", on).map_err(|e| e.to_string())?;
+    // Keep the tray checkmark in sync with UI-initiated toggles too.
+    let _ = privacy_menu.0.set_checked(on);
+    Ok(())
 }

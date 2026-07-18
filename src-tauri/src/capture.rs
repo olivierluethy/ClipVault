@@ -7,7 +7,11 @@ use crate::watcher::ClipEvent;
 pub const MAX_TEXT: usize = 1_048_576;      // 1 MB
 pub const MAX_IMAGE: usize = 26_214_400;    // 25 MB
 
-pub fn process_event(storage: &Storage, ev: ClipEvent) -> Result<Option<InsertOutcome>> {
+pub fn process_event(
+    storage: &Storage,
+    ev: ClipEvent,
+    self_copy: &std::sync::Mutex<Option<String>>,
+) -> Result<Option<InsertOutcome>> {
     let item_type = classify(&ev.mime, &ev.bytes);
 
     // Size guards.
@@ -18,6 +22,17 @@ pub fn process_event(storage: &Storage, ev: ClipEvent) -> Result<Option<InsertOu
     }
 
     let hash = sha256_hex(&ev.bytes);
+
+    // Self-copy suppression: if this hash matches what the app itself just copied
+    // to the clipboard, skip re-capturing it (one-shot marker).
+    {
+        let mut guard = self_copy.lock().unwrap();
+        if guard.as_deref() == Some(hash.as_str()) {
+            *guard = None; // consume the one-shot marker
+            return Ok(None);
+        }
+    }
+
     let now = chrono_now_millis();
 
     let new_item = match item_type {
@@ -59,7 +74,7 @@ mod tests {
     #[test]
     fn stores_text_event() {
         let (_d, s) = storage();
-        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: b"hello".to_vec() }).unwrap();
+        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: b"hello".to_vec() }, &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Some(InsertOutcome::Inserted(_))));
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].content.as_deref(), Some("hello"));
@@ -70,7 +85,7 @@ mod tests {
     fn stores_image_as_file() {
         let (_d, s) = storage();
         let png = b"\x89PNG\r\n\x1a\nDATA".to_vec();
-        let out = process_event(&s, ClipEvent{ mime: "image/png".into(), bytes: png.clone() }).unwrap();
+        let out = process_event(&s, ClipEvent{ mime: "image/png".into(), bytes: png.clone() }, &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Some(InsertOutcome::Inserted(_))));
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].item_type, "image");
@@ -82,7 +97,7 @@ mod tests {
     fn oversized_text_skipped() {
         let (_d, s) = storage();
         let big = vec![b'a'; MAX_TEXT + 1];
-        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: big }).unwrap();
+        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: big }, &std::sync::Mutex::new(None)).unwrap();
         assert!(out.is_none());
         assert_eq!(s.list_recent(10).unwrap().len(), 0);
     }
@@ -91,9 +106,23 @@ mod tests {
     fn duplicate_bumps_not_inserts() {
         let (_d, s) = storage();
         let ev = || ClipEvent{ mime:"UTF8_STRING".into(), bytes:b"x".to_vec() };
-        process_event(&s, ev()).unwrap();
-        let second = process_event(&s, ev()).unwrap();
+        process_event(&s, ev(), &std::sync::Mutex::new(None)).unwrap();
+        let second = process_event(&s, ev(), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(second, Some(InsertOutcome::Bumped(_))));
         assert_eq!(s.list_recent(10).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn self_copy_marker_suppresses_capture() {
+        let (_d, s) = storage();
+        let bytes = b"self-copied text".to_vec();
+        let hash = sha256_hex(&bytes);
+        let marker = std::sync::Mutex::new(Some(hash));
+
+        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes }, &marker).unwrap();
+
+        assert!(out.is_none(), "self-copy should be suppressed, not stored");
+        assert_eq!(s.list_recent(10).unwrap().len(), 0, "nothing should be persisted");
+        assert_eq!(*marker.lock().unwrap(), None, "one-shot marker should be consumed");
     }
 }
