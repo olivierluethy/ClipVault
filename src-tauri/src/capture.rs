@@ -45,12 +45,19 @@ pub fn process_event(
             let id_ext = extension_for(item_type, &ev.mime);
             let file_name = format!("{}.{}", &hash, id_ext);
             let path = storage.attachments_dir().join(&file_name);
+            let thumbs = storage.attachments_dir().join("thumbs");
+            let thumb_path = thumbs.join(format!("{}.webp", &hash));
+            let preview: Option<String>;
             if !path.exists() {
                 std::fs::write(&path, &ev.bytes)?;
+                preview = crate::thumbnail::generate(&ev.bytes, &thumbs, &hash)
+                    .map(|p| p.to_string_lossy().into_owned());
+            } else {
+                // dedup: original already stored; reuse the existing thumbnail if present.
+                preview = if thumb_path.exists() {
+                    Some(thumb_path.to_string_lossy().into_owned())
+                } else { None };
             }
-            let thumbs = storage.attachments_dir().join("thumbs");
-            let preview = crate::thumbnail::generate(&ev.bytes, &thumbs, &hash)
-                .map(|p| p.to_string_lossy().into_owned());
             NewItem { item_type, content: None,
                 file_path: Some(path.to_string_lossy().into_owned()),
                 preview_path: preview, content_hash: hash }

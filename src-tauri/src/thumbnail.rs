@@ -8,7 +8,7 @@ pub fn generate(bytes: &[u8], thumbs_dir: &Path, hash: &str) -> Option<PathBuf> 
     let thumb = img.thumbnail(MAX_DIM, MAX_DIM); // preserves aspect, fast
     let rgba = thumb.to_rgba8();
     let encoder = webp::Encoder::from_rgba(&rgba, rgba.width(), rgba.height());
-    let webp_data = encoder.encode(80.0); // quality 80
+    let webp_data = encoder.encode_simple(false, 80.0).ok()?; // quality 80
     let out = thumbs_dir.join(format!("{hash}.webp"));
     std::fs::write(&out, &*webp_data).ok()?;
     Some(out)
