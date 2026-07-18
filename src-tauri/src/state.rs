@@ -13,4 +13,8 @@ pub struct AppState {
     /// `Arc<Mutex<..>>` and passes it into `process_event` on every event.
     #[allow(dead_code)]
     pub last_self_copy: Arc<Mutex<Option<String>>>,
+    /// Channel to the clipboard-writer thread; used by the (Task 7) `copy_item` command
+    /// to place an item's bytes back on the X11 CLIPBOARD selection.
+    #[allow(dead_code)]
+    pub writer: std::sync::mpsc::Sender<crate::clipboard_writer::WriteRequest>,
 }

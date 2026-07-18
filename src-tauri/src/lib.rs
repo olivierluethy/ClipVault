@@ -6,6 +6,7 @@ mod capture;
 mod state;
 mod ipc;
 mod thumbnail;
+mod clipboard_writer;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -59,11 +60,13 @@ pub fn run() {
             let privacy_init = storage.get_bool("privacy_mode", false);
             let privacy = Arc::new(AtomicBool::new(privacy_init));
             let last_self_copy: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let writer = crate::clipboard_writer::spawn();
 
             app.manage(crate::state::AppState {
                 storage: storage.clone(),
                 privacy: privacy.clone(),
                 last_self_copy: last_self_copy.clone(),
+                writer,
             });
 
             // Enable autostart on first run only; respects a user's later choice to disable it.
