@@ -55,10 +55,10 @@ pub struct ItemDto {
     pub updated_at: i64,
 }
 
-const ITEM_COLS: &str =
+pub(crate) const ITEM_COLS: &str =
     "id, type, content, file_path, preview_path, copy_count, pinned, created_at, updated_at";
 
-fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
+pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
         id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?, file_path: r.get(3)?,
         preview_path: r.get(4)?, copy_count: r.get(5)?,
