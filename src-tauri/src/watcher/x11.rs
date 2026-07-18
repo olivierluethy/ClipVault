@@ -1,10 +1,14 @@
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use anyhow::{anyhow, Result};
 use x11_clipboard::Clipboard;
-use x11rb::protocol::xproto::{Atom, ConnectionExt};
-use super::{ClipEvent, ClipboardBackend, pick_best};
+use x11rb::protocol::xproto::Atom;
+use super::{ClipEvent, ClipboardBackend};
+
+/// Image MIME targets we probe on a non-text clipboard change, in priority order.
+const IMAGE_MIMES: [&str; 3] = ["image/gif", "image/png", "image/jpeg"];
 
 pub struct X11Backend {
     clipboard: Clipboard,
@@ -32,36 +36,33 @@ impl X11Backend {
             .get_atom(name)
             .map_err(|e| anyhow!("failed to intern atom {name}: {e}"))
     }
-
-    /// Resolve an atom id back to its string name (for TARGETS enumeration).
-    fn atom_name(&self, atom: Atom) -> Result<String> {
-        let conn = &self.clipboard.getter.connection;
-        let reply = conn
-            .get_atom_name(atom)
-            .map_err(|e| anyhow!("get_atom_name request failed: {e}"))?
-            .reply()
-            .map_err(|e| anyhow!("get_atom_name reply failed: {e}"))?;
-        Ok(String::from_utf8_lossy(&reply.name).into_owned())
-    }
 }
 
 impl ClipboardBackend for X11Backend {
     fn run(self: Box<Self>, tx: Sender<ClipEvent>, privacy: Arc<AtomicBool>) {
-        // Atom ids (u32) are Copy; reading the individual fields avoids moving
-        // the non-Copy `Atoms` struct out of `self`.
         let selection = self.clipboard.getter.atoms.clipboard;
-        let targets_target = self.clipboard.getter.atoms.targets;
         let property = self.clipboard.getter.atoms.property;
+        let utf8 = self.clipboard.getter.atoms.utf8_string;
+
+        // Intern the image targets we probe (priority order) once up front.
+        let image_targets: Vec<(&str, Atom)> = IMAGE_MIMES
+            .into_iter()
+            .filter_map(|m| self.atom(m).ok().map(|a| (m, a)))
+            .collect();
 
         let mut consecutive_failures: u32 = 0;
 
         loop {
-            // Block until the CLIPBOARD selection changes (XFIXES SelectionNotify),
-            // then read its TARGETS list. This is event-driven, never polled.
-            let targets_raw = match self.clipboard.load_wait(selection, targets_target, property) {
-                Ok(b) => {
+            // Block until the CLIPBOARD selection changes (XFIXES SelectionNotify).
+            // `load_wait` on UTF8_STRING both waits for the change and returns the
+            // text when the new content is text; for a non-text change (e.g. an
+            // image was copied) the owner can't convert UTF8_STRING and this
+            // returns Ok(empty) — we still learn a change happened. This is
+            // event-driven (blocking on XFIXES), never polled.
+            let text = match self.clipboard.load_wait(selection, utf8, property) {
+                Ok(bytes) => {
                     consecutive_failures = 0;
-                    b
+                    bytes
                 }
                 Err(_) => {
                     // If the X connection has died persistently (X server restart /
@@ -75,7 +76,7 @@ impl ClipboardBackend for X11Backend {
                         );
                         return;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    std::thread::sleep(Duration::from_millis(200));
                     continue;
                 }
             };
@@ -84,22 +85,22 @@ impl ClipboardBackend for X11Backend {
                 continue; // paused: consume the change signal, store nothing
             }
 
-            // TARGETS is a list of 32-bit atom ids, native byte order.
-            let names: Vec<String> = targets_raw
-                .chunks_exact(4)
-                .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
-                .filter_map(|a| self.atom_name(a).ok())
-                .collect();
+            if !text.is_empty() {
+                let _ = tx.send(ClipEvent { mime: "UTF8_STRING".to_string(), bytes: text });
+                continue;
+            }
 
-            let Some(best) = pick_best(&names) else { continue };
-            let Ok(best_atom) = self.atom(best) else { continue };
-
-            // Read the best target's raw bytes, unmodified (no re-encoding).
-            match self.clipboard.load_wait(selection, best_atom, property) {
-                Ok(bytes) if !bytes.is_empty() => {
-                    let _ = tx.send(ClipEvent { mime: best.to_string(), bytes });
+            // Non-text change: probe image targets for the CURRENT value. `load`
+            // reads immediately (no wait) and returns the raw bytes unmodified,
+            // preserving GIF/PNG encoding. First non-empty target wins.
+            for (mime, atom) in &image_targets {
+                match self.clipboard.load(selection, *atom, property, Duration::from_millis(500)) {
+                    Ok(bytes) if !bytes.is_empty() => {
+                        let _ = tx.send(ClipEvent { mime: mime.to_string(), bytes });
+                        break;
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
     }
