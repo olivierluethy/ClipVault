@@ -174,6 +174,7 @@ pub fn run() {
             crate::ipc::set_pinned,
             crate::ipc::delete_item,
             crate::ipc::restore_item,
+            crate::ipc::update_content,
             crate::ipc::copy_item,
             crate::ipc::get_privacy,
             crate::ipc::set_privacy,

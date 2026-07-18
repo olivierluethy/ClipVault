@@ -144,6 +144,15 @@ impl Storage {
         Ok(())
     }
 
+    pub fn update_content(&self, id: &str, content: &str, now: i64) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET content = ?1, updated_at = ?2 WHERE id = ?3",
+            params![content, now, id],
+        )?;
+        Ok(())
+    }
+
     pub fn restore(&self, id: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE items SET deleted_at = NULL WHERE id = ?1", params![id])?;
@@ -298,6 +307,17 @@ mod tests {
     fn get_item_missing_returns_none() {
         let (_d, s) = storage();
         assert!(s.get_item("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn update_content_changes_text_and_updated_at() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("old".into()),file_path:None,preview_path:None,content_hash:"he".into()}, 100).unwrap();
+        let id = s.list_items(10, None, None).unwrap()[0].id.clone();
+        s.update_content(&id, "new value", 500).unwrap();
+        let row = s.list_items(10, None, None).unwrap().into_iter().next().unwrap();
+        assert_eq!(row.content.as_deref(), Some("new value"));
+        assert_eq!(row.updated_at, 500);
     }
 
     #[test]

@@ -40,6 +40,11 @@ pub fn restore_item(state: State<AppState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn update_content(state: State<AppState>, id: String, content: String) -> Result<(), String> {
+    state.storage.update_content(&id, &content, now_ms()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
     let (ty, content, file_path, hash) = state.storage.get_item(&id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
