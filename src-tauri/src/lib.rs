@@ -7,6 +7,7 @@ mod state;
 mod ipc;
 mod thumbnail;
 mod clipboard_writer;
+mod link_meta;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -112,7 +113,33 @@ pub fn run() {
                 use tauri_plugin_notification::NotificationExt;
                 for ev in rx {
                     match crate::capture::process_event(&storage_c, ev, &self_copy_c) {
-                        Ok(Some(_)) => { let _ = handle.emit("item-added", ()); }
+                        Ok(Some(outcome)) => {
+                            let _ = handle.emit("item-added", ());
+                            // Link metadata (title + favicon URL) is fetched off this
+                            // thread so a slow/unreachable site never blocks capture.
+                            if let crate::storage::InsertOutcome::Inserted(id) = &outcome {
+                                if storage_c.get_bool("fetch_link_metadata", true) {
+                                    if let Ok(Some((ty, Some(content), _, _)))
+                                        = storage_c.get_item(id)
+                                    {
+                                        if ty == "link" {
+                                            let storage_meta = storage_c.clone();
+                                            let handle_meta = handle.clone();
+                                            let id_meta = id.clone();
+                                            std::thread::spawn(move || {
+                                                if let Some(meta) = crate::link_meta::fetch(&content) {
+                                                    if let Ok(json) = serde_json::to_string(&meta) {
+                                                        if storage_meta.set_metadata(&id_meta, &json).is_ok() {
+                                                            let _ = handle_meta.emit("item-added", ());
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         Ok(None) => {
                             // Either an oversized item was skipped, or a self-copy was
                             // suppressed; either way capture::process_event already logs
@@ -194,6 +221,8 @@ pub fn run() {
             crate::ipc::set_privacy,
             crate::ipc::get_exclude_secrets,
             crate::ipc::set_exclude_secrets,
+            crate::ipc::get_fetch_link_metadata,
+            crate::ipc::set_fetch_link_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");

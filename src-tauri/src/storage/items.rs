@@ -53,16 +53,21 @@ pub struct ItemDto {
     pub pinned: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// JSON-encoded `link_meta::LinkMeta` (title + favicon URL), filled in asynchronously
+    /// after a link item is captured. `None` until the background fetch completes (or if
+    /// link metadata fetching is disabled / the fetch failed).
+    pub metadata: Option<String>,
 }
 
 pub(crate) const ITEM_COLS: &str =
-    "id, type, content, file_path, preview_path, copy_count, pinned, created_at, updated_at";
+    "id, type, content, file_path, preview_path, copy_count, pinned, created_at, updated_at, metadata";
 
 pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
         id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?, file_path: r.get(3)?,
         preview_path: r.get(4)?, copy_count: r.get(5)?,
         pinned: r.get::<_, i64>(6)? != 0, created_at: r.get(7)?, updated_at: r.get(8)?,
+        metadata: r.get(9)?,
     })
 }
 
@@ -218,6 +223,17 @@ impl Storage {
     pub fn restore(&self, id: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE items SET deleted_at = NULL WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Stores JSON-encoded link metadata (title + favicon URL) for an item, set
+    /// asynchronously once the background fetch in `link_meta::fetch` completes.
+    pub fn set_metadata(&self, id: &str, metadata_json: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET metadata = ?1 WHERE id = ?2",
+            params![metadata_json, id],
+        )?;
         Ok(())
     }
 
@@ -403,6 +419,17 @@ mod tests {
         let id = s.list_items(10,None,None).unwrap()[0].id.clone();
         let got = s.get_item(&id).unwrap().unwrap();
         assert_eq!(got.0, "text"); assert_eq!(got.1.as_deref(), Some("q")); assert_eq!(got.3, "hq");
+    }
+
+    #[test]
+    fn set_metadata_persists_json() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Link,content:Some("https://example.com".into()),file_path:None,preview_path:None,content_hash:"hl".into()},1).unwrap();
+        let id = s.list_items(10,None,None).unwrap()[0].id.clone();
+        assert_eq!(s.list_items(10,None,None).unwrap()[0].metadata, None);
+        s.set_metadata(&id, r#"{"title":"Example","favicon_url":"https://example.com/favicon.ico"}"#).unwrap();
+        let row = s.list_items(10,None,None).unwrap().into_iter().next().unwrap();
+        assert_eq!(row.metadata.as_deref(), Some(r#"{"title":"Example","favicon_url":"https://example.com/favicon.ico"}"#));
     }
 
     #[test]

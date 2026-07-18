@@ -161,3 +161,13 @@ pub fn set_exclude_secrets(state: State<AppState>, on: bool) -> Result<(), Strin
     state.exclude_secrets.store(on, Ordering::Relaxed);
     state.storage.set_bool("exclude_secrets", on).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn get_fetch_link_metadata(state: State<AppState>) -> bool {
+    state.storage.get_bool("fetch_link_metadata", true)
+}
+
+#[tauri::command]
+pub fn set_fetch_link_metadata(state: State<AppState>, on: bool) -> Result<(), String> {
+    state.storage.set_bool("fetch_link_metadata", on).map_err(|e| e.to_string())
+}
