@@ -154,6 +154,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+
   const clearSearch = useCallback(() => {
     setQuery("");
     setDebouncedQuery("");
@@ -163,6 +164,8 @@ export default function App() {
   const handleSelectFolder = useCallback((f: string) => {
     clearSearch();
     setDateRange(null);
+    setSelectedIds(new Set());
+    anchorIndexRef.current = null;
     setFolder(f);
   }, [clearSearch]);
 
@@ -338,6 +341,61 @@ export default function App() {
     anchorIndexRef.current = null;
   }, []);
 
+  // Checkbox click: shift-click extends a contiguous range from the last anchor.
+  const onCheckboxClick = useCallback(
+    (it: Item, index: number, e: React.MouseEvent) => {
+      if (e.shiftKey && anchorIndexRef.current !== null) {
+        selectRange(anchorIndexRef.current, index);
+        return;
+      }
+      toggleSelected(it.id);
+      anchorIndexRef.current = index;
+    },
+    [selectRange, toggleSelected]
+  );
+
+  // Item ids under a given date-group header (up to the next header).
+  const headerGroupIds = useCallback(
+    (headerIndex: number): string[] => {
+      const ids: string[] = [];
+      for (let i = headerIndex + 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (r.kind === "header") break;
+        ids.push(r.item.id);
+      }
+      return ids;
+    },
+    [rows]
+  );
+
+  const toggleGroup = useCallback((ids: string[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSel = ids.length > 0 && ids.every((id) => next.has(id));
+      if (allSel) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(flatItems.map((i) => i.id)));
+  }, [flatItems]);
+
+  // Global Ctrl/Cmd+A selects every item in the current view (unless typing).
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        e.preventDefault();
+        selectAll();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [selectAll]);
+
   const bulkAddToFolder = useCallback(
     async (folderId: string) => {
       const ids = Array.from(selectedIds);
@@ -378,6 +436,7 @@ export default function App() {
       setEditingId(null);
     },
     copyAndHide,
+    toggleSelect: (it) => toggleSelected(it.id),
   });
 
   const virt = useVirtualizer({
@@ -499,8 +558,10 @@ export default function App() {
         {selectedIds.size > 0 && (
           <BulkActionBar
             count={selectedIds.size}
+            total={flatItems.length}
             folders={folders}
             onAddToFolder={bulkAddToFolder}
+            onSelectAll={selectAll}
             onDelete={bulkDelete}
             onClear={clearSelection}
           />
@@ -524,6 +585,7 @@ export default function App() {
                   onToggleFolder={(folderId, checked) => toggleFolder(it, folderId, checked)}
                   onCreateAndAssign={(name) => createAndAssign(it, name)}
                   onBodyClick={(e) => onBodyClick(it, flatIndexById.get(it.id) ?? i, e)}
+                  onToggleSelect={(e) => onCheckboxClick(it, flatIndexById.get(it.id) ?? i, e)}
                   onCopy={() => {
                     setSel(i);
                     copy(it);
@@ -565,6 +627,9 @@ export default function App() {
             {virt.getVirtualItems().map((v) => {
               const row = rows[v.index];
               const flatIndex = row.kind === "item" ? flatIndexById.get(row.item.id) ?? -1 : -1;
+              const groupIds = row.kind === "header" ? headerGroupIds(v.index) : [];
+              const groupAll = groupIds.length > 0 && groupIds.every((id) => selectedIds.has(id));
+              const groupSome = groupIds.some((id) => selectedIds.has(id));
               return (
                 <div
                   key={v.key}
@@ -579,8 +644,19 @@ export default function App() {
                   data-index={v.index}
                 >
                   {row.kind === "header" ? (
-                    <div className="sticky top-0 bg-bg py-1 text-xs uppercase text-fg-muted z-10">
-                      {row.label}
+                    <div className="sticky top-0 bg-bg py-1 z-10 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select all in ${row.label}`}
+                        title={`Select all in ${row.label}`}
+                        checked={groupAll}
+                        ref={(el) => {
+                          if (el) el.indeterminate = groupSome && !groupAll;
+                        }}
+                        onChange={() => toggleGroup(groupIds)}
+                        className="h-3.5 w-3.5 accent-accent cursor-pointer"
+                      />
+                      <span className="text-xs uppercase text-fg-muted">{row.label}</span>
                     </div>
                   ) : (
                     <div className="relative pb-2">
@@ -599,6 +675,7 @@ export default function App() {
                         }
                         onCreateAndAssign={(name) => createAndAssign(row.item, name)}
                         onBodyClick={(e) => onBodyClick(row.item, flatIndex, e)}
+                        onToggleSelect={(e) => onCheckboxClick(row.item, flatIndex, e)}
                         onCopy={() => copy(row.item)}
                         onCleanCopy={() => cleanCopy(row.item)}
                         onPlainCopy={() => plainCopy(row.item)}

@@ -109,6 +109,7 @@ export function Card(props: {
   onToggleFolder: (folderId: string, checked: boolean) => void;
   onCreateAndAssign: (name: string) => void;
   onBodyClick: (e: React.MouseEvent) => void;
+  onToggleSelect: (e: React.MouseEvent) => void;
   onCopy: () => void;
   onCleanCopy: () => void;
   onPlainCopy: () => void;
@@ -180,14 +181,25 @@ export function Card(props: {
         ${selected ? "border-accent" : "border-border"}
         ${multiSelected ? "ring-2 ring-accent bg-accent-dim/20" : ""}`}
     >
-      {multiSelected && (
-        <span
-          aria-hidden
-          className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] leading-none text-bg-raised"
-        >
-          ✓
-        </span>
-      )}
+      {/* Selection checkbox — quiet until the row is hovered or the item is checked. */}
+      <button
+        role="checkbox"
+        aria-checked={multiSelected}
+        aria-label={multiSelected ? "Deselect item" : "Select item"}
+        title="Select"
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onToggleSelect(e);
+        }}
+        className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] leading-none transition-opacity
+          ${
+            multiSelected
+              ? "border-accent bg-accent text-bg-raised opacity-100"
+              : "border-border text-transparent opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          }`}
+      >
+        ✓
+      </button>
       <span className="text-xs uppercase text-accent w-12 shrink-0">{item.item_type}</span>
       {item.item_type === "color" ? (
         <span className="flex items-center gap-2 truncate text-sm flex-1">

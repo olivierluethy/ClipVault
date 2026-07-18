@@ -11,6 +11,8 @@ export function useKeyboardNav(
     close: () => void;
     /** Copy the selected item, then hide the window (Enter in the speed workflow). */
     copyAndHide: (it: Item) => void;
+    /** Toggle the focused row's multi-select checkbox (Space). */
+    toggleSelect: (it: Item) => void;
   }
 ) {
   const [sel, setSel] = useState(0);
@@ -33,6 +35,12 @@ export function useKeyboardNav(
       } else if (e.key === "Delete") {
         const it = flatItems[sel];
         if (it) actions.del(it);
+      } else if (e.key === " ") {
+        const it = flatItems[sel];
+        if (it) {
+          e.preventDefault();
+          actions.toggleSelect(it);
+        }
       } else if (e.key === "Escape") {
         actions.close();
       } else if (e.key.toLowerCase() === "p") {

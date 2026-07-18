@@ -52,8 +52,10 @@ function FolderDropdown(props: {
 
 export function BulkActionBar(props: {
   count: number;
+  total: number;
   folders: FolderDto[];
   onAddToFolder: (folderId: string) => void;
+  onSelectAll: () => void;
   onDelete: () => void;
   onClear: () => void;
 }) {
@@ -62,6 +64,14 @@ export function BulkActionBar(props: {
   return (
     <div className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-bg-raised px-4 py-2 shrink-0">
       <span className="text-sm font-medium text-fg">{props.count} selected</span>
+      {props.count < props.total && (
+        <button
+          onClick={props.onSelectAll}
+          className="rounded px-2 py-1 text-sm text-accent hover:underline"
+        >
+          Select all {props.total}
+        </button>
+      )}
       <div className="relative">
         <button
           onClick={() => setFolderMenuOpen((v) => !v)}
@@ -81,13 +91,13 @@ export function BulkActionBar(props: {
         onClick={props.onDelete}
         className="rounded border border-border px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-red-400"
       >
-        Delete
+        Delete selected
       </button>
       <button
         onClick={props.onClear}
         className="ml-auto rounded px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
       >
-        Clear
+        Clear selection
       </button>
     </div>
   );
