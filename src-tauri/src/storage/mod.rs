@@ -28,11 +28,17 @@ CREATE TABLE IF NOT EXISTS settings (
 
 impl Storage {
     pub fn open(db_path: &Path) -> rusqlite::Result<Storage> {
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).ok();
+        let parent = db_path.parent().filter(|p| !p.as_os_str().is_empty());
+        let root = parent.map(|p| p.to_path_buf()).unwrap_or_else(|| PathBuf::from("."));
+        let attachments = root.join("attachments");
+        for dir in [&root, &attachments] {
+            std::fs::create_dir_all(dir).map_err(|e| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+                    Some(format!("failed to create dir {}: {e}", dir.display())),
+                )
+            })?;
         }
-        let root = db_path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
-        std::fs::create_dir_all(root.join("attachments")).ok();
 
         let conn = Connection::open(db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -67,5 +73,14 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn open_creates_attachments_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("clipvault.db");
+        let s = Storage::open(&db).unwrap();
+        assert!(s.attachments_dir().is_dir());
+        assert!(dir.path().join("attachments").is_dir());
     }
 }
