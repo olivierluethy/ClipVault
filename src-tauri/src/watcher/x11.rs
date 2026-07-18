@@ -53,12 +53,31 @@ impl ClipboardBackend for X11Backend {
         let targets_target = self.clipboard.getter.atoms.targets;
         let property = self.clipboard.getter.atoms.property;
 
+        let mut consecutive_failures: u32 = 0;
+
         loop {
             // Block until the CLIPBOARD selection changes (XFIXES SelectionNotify),
             // then read its TARGETS list. This is event-driven, never polled.
             let targets_raw = match self.clipboard.load_wait(selection, targets_target, property) {
-                Ok(b) => b,
-                Err(_) => continue, // transient conversion failure; wait for next change
+                Ok(b) => {
+                    consecutive_failures = 0;
+                    b
+                }
+                Err(_) => {
+                    // If the X connection has died persistently (X server restart /
+                    // session logout), load_wait fails immediately every call, which
+                    // would otherwise busy-loop at 100% CPU. Back off and give up
+                    // after repeated consecutive failures instead of spinning.
+                    consecutive_failures += 1;
+                    if consecutive_failures >= 10 {
+                        eprintln!(
+                            "clipvault: X11 clipboard unavailable after {consecutive_failures} consecutive failures; watcher stopping"
+                        );
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    continue;
+                }
             };
 
             if privacy.load(Ordering::Relaxed) {
