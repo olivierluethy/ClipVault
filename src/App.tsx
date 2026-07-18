@@ -133,9 +133,9 @@ export default function App() {
   }, [flatItems]);
 
   return (
-    <div className="min-h-full flex">
+    <div className="h-screen flex">
       <Sidebar counts={counts} selected={folder} onSelect={setFolder} />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="flex items-center justify-between p-4 border-b border-border shrink-0">
           <h1 className="text-lg font-semibold">ClipVault</h1>
           <button
@@ -176,7 +176,7 @@ export default function App() {
           </section>
         )}
 
-        <div ref={parentRef} className="flex-1 overflow-auto p-4">
+        <div ref={parentRef} className="flex-1 overflow-auto p-4 min-h-0">
           {isEmpty && <p className="text-fg-muted">Nothing captured yet — copy something.</p>}
           <div style={{ height: virt.getTotalSize(), position: "relative" }}>
             {virt.getVirtualItems().map((v) => {

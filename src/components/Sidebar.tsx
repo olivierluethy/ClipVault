@@ -25,7 +25,7 @@ export function Sidebar({
   onSelect: (id: string) => void;
 }) {
   return (
-    <nav className="w-[200px] shrink-0 h-full border-r border-border p-2 flex flex-col gap-1 overflow-y-auto">
+    <nav className="w-[200px] shrink-0 border-r border-border p-2 flex flex-col gap-1 overflow-y-auto">
       {FOLDERS.map((f) => {
         const isSelected = selected === f.id;
         return (
