@@ -9,6 +9,8 @@ impl ItemType {
     pub fn as_str(&self) -> &'static str {
         match self { ItemType::Text => "text", ItemType::Image => "image", ItemType::Gif => "gif" }
     }
+    // Paired with as_str(); used when reading typed items back in a later phase.
+    #[allow(dead_code)]
     pub fn from_str(s: &str) -> ItemType {
         match s { "image" => ItemType::Image, "gif" => ItemType::Gif, _ => ItemType::Text }
     }
@@ -38,11 +40,15 @@ pub struct ItemDto {
 impl Storage {
     pub fn insert_or_bump(&self, item: NewItem, now: i64) -> rusqlite::Result<InsertOutcome> {
         let conn = self.conn.lock().unwrap();
-        let existing: Option<String> = conn.query_row(
+        let existing: Option<String> = match conn.query_row(
             "SELECT id FROM items WHERE content_hash = ?1",
             params![item.content_hash],
             |r| r.get(0),
-        ).ok();
+        ) {
+            Ok(id) => Some(id),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e),
+        };
 
         if let Some(id) = existing {
             conn.execute(

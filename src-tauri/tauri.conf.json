@@ -22,7 +22,7 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/.local/share/clipvault/**"]
+        "scope": ["$DATA/clipvault/**", "$HOME/.local/share/clipvault/**"]
       }
     }
   },

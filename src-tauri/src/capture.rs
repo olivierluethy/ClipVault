@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use anyhow::Result;
 use crate::classifier::{classify, extension_for};
 use crate::hashing::sha256_hex;

@@ -26,7 +26,14 @@ pub fn pick_best<'a>(available: &'a [String]) -> Option<&'a str> {
             return Some(found.as_str());
         }
     }
-    // Fallback: any text/* target.
+    // Any other image type (webp, bmp, tiff, ...) before falling back to text.
+    if let Some(img) = available.iter().find(|a| a.starts_with("image/")) {
+        return Some(img.as_str());
+    }
+    // Prefer plain text, then any text/* target.
+    if let Some(t) = available.iter().find(|a| a.starts_with("text/plain")) {
+        return Some(t.as_str());
+    }
     available.iter().find(|a| a.starts_with("text/")).map(|s| s.as_str())
 }
 
@@ -47,5 +54,15 @@ mod tests {
         assert_eq!(pick_best(&avail2), Some("image/png"));
         let avail3 = vec!["text/plain".into(), "text/html".into()];
         assert_eq!(pick_best(&avail3), Some("text/plain"));
+    }
+    #[test]
+    fn falls_back_to_other_image_types() {
+        let avail = vec!["text/plain".into(), "image/webp".into()];
+        assert_eq!(pick_best(&avail), Some("image/webp"));
+    }
+    #[test]
+    fn prefers_plain_text_over_other_text() {
+        let avail = vec!["text/html".into(), "text/plain".into()];
+        assert_eq!(pick_best(&avail), Some("text/plain"));
     }
 }
