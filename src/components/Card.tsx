@@ -61,7 +61,17 @@ export function Card(props: {
         ${selected ? "border-accent" : "border-border"}`}
     >
       <span className="text-xs uppercase text-accent w-12 shrink-0">{item.item_type}</span>
-      {item.item_type === "text" ? (
+      {item.item_type === "color" ? (
+        <span className="flex items-center gap-2 truncate text-sm flex-1">
+          <span
+            className="w-4 h-4 rounded border border-border shrink-0"
+            style={{ backgroundColor: item.content ?? "transparent" }}
+          />
+          {item.content}
+        </span>
+      ) : item.item_type === "link" ? (
+        <span className="truncate text-sm flex-1 text-accent">{item.content}</span>
+      ) : item.item_type === "text" || item.item_type === "number" ? (
         <span className="truncate text-sm flex-1">{item.content}</span>
       ) : thumb ? (
         <img

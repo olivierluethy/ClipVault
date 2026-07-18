@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 
 export type Item = {
   id: string;
-  item_type: "text" | "image" | "gif";
+  item_type: "text" | "link" | "number" | "color" | "image" | "gif";
   content: string | null;
   file_path: string | null;
   preview_path: string | null;
@@ -20,6 +20,14 @@ export const listItems = (limit = 100, beforeCreatedAt?: number, beforeId?: stri
     beforeId: beforeId ?? null,
   });
 export const listPinned = () => invoke<Item[]>("list_pinned");
+export const listByType = (typeStr: string, limit = 100, beforeCreatedAt?: number, beforeId?: string) =>
+  invoke<Item[]>("list_by_type", {
+    typeStr,
+    limit,
+    beforeCreatedAt: beforeCreatedAt ?? null,
+    beforeId: beforeId ?? null,
+  });
+export const folderCounts = () => invoke<[string, number][]>("folder_counts");
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 export const restoreItem = (id: string) => invoke<void>("restore_item", { id });
