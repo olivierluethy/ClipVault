@@ -2,10 +2,57 @@ use tauri::State;
 use std::sync::atomic::Ordering;
 use crate::state::AppState;
 use crate::storage::ItemDto;
+use crate::clipboard_writer::WriteRequest;
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
 
 #[tauri::command]
-pub fn list_recent_items(state: State<AppState>, limit: i64) -> Result<Vec<ItemDto>, String> {
-    state.storage.list_recent(limit).map_err(|e| e.to_string())
+pub fn list_items(
+    state: State<AppState>,
+    limit: i64,
+    before_created_at: Option<i64>,
+    before_id: Option<String>,
+) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_items(limit, before_created_at, before_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_pinned(state: State<AppState>) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_pinned().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_pinned(state: State<AppState>, id: String, pinned: bool) -> Result<(), String> {
+    state.storage.set_pinned(&id, pinned).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_item(state: State<AppState>, id: String) -> Result<(), String> {
+    state.storage.soft_delete(&id, now_ms()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_item(state: State<AppState>, id: String) -> Result<(), String> {
+    state.storage.restore(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
+    let (ty, content, file_path, hash) = state.storage.get_item(&id)
+        .map_err(|e| e.to_string())?.ok_or("item not found")?;
+    // Suppress the echo BEFORE writing, so the watcher thread ignores our own copy-back.
+    *state.last_self_copy.lock().unwrap() = Some(hash);
+    let req = if ty == "text" {
+        WriteRequest { mime: "UTF8_STRING".into(), bytes: content.unwrap_or_default().into_bytes() }
+    } else {
+        let bytes = std::fs::read(file_path.ok_or("missing file")?).map_err(|e| e.to_string())?;
+        let mime = if ty == "gif" { "image/gif" } else { "image/png" };
+        WriteRequest { mime: mime.into(), bytes }
+    };
+    state.writer.send(req).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

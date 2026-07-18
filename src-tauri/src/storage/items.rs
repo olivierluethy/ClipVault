@@ -82,6 +82,8 @@ impl Storage {
         Ok(InsertOutcome::Inserted(id))
     }
 
+    // Superseded by `list_items` (compound-cursor pagination); kept for its existing tests.
+    #[allow(dead_code)]
     pub fn list_recent(&self, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
@@ -91,8 +93,6 @@ impl Storage {
         rows
     }
 
-    // Wired to an IPC command in a later task; exercised directly by tests until then.
-    #[allow(dead_code)]
     pub fn list_items(
         &self,
         limit: i64,
@@ -116,8 +116,6 @@ impl Storage {
         Ok(rows)
     }
 
-    // Wired to an IPC command in a later task; exercised directly by tests until then.
-    #[allow(dead_code)]
     pub fn list_pinned(&self) -> rusqlite::Result<Vec<ItemDto>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
@@ -128,8 +126,6 @@ impl Storage {
         rows
     }
 
-    // Wired to an IPC command in a later task; exercised directly by tests until then.
-    #[allow(dead_code)]
     pub fn set_pinned(&self, id: &str, pinned: bool) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -139,8 +135,6 @@ impl Storage {
         Ok(())
     }
 
-    // Wired to an IPC command in a later task; exercised directly by tests until then.
-    #[allow(dead_code)]
     pub fn soft_delete(&self, id: &str, now: i64) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -150,12 +144,20 @@ impl Storage {
         Ok(())
     }
 
-    // Wired to an IPC command in a later task; exercised directly by tests until then.
-    #[allow(dead_code)]
     pub fn restore(&self, id: &str) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE items SET deleted_at = NULL WHERE id = ?1", params![id])?;
         Ok(())
+    }
+
+    pub fn get_item(&self, id: &str) -> rusqlite::Result<Option<(String, Option<String>, Option<String>, String)>> {
+        let conn = self.conn.lock().unwrap();
+        match conn.query_row("SELECT type, content, file_path, content_hash FROM items WHERE id=?1",
+            rusqlite::params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))) {
+            Ok(v) => Ok(Some(v)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     /// Deletes rows already soft-deleted, returning their (file_path, preview_path)
@@ -281,6 +283,21 @@ mod tests {
         let rows = s.list_items(10, None, None).unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].copy_count >= 2);
+    }
+
+    #[test]
+    fn get_item_returns_fields() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("q".into()),file_path:None,preview_path:None,content_hash:"hq".into()},1).unwrap();
+        let id = s.list_items(10,None,None).unwrap()[0].id.clone();
+        let got = s.get_item(&id).unwrap().unwrap();
+        assert_eq!(got.0, "text"); assert_eq!(got.1.as_deref(), Some("q")); assert_eq!(got.3, "hq");
+    }
+
+    #[test]
+    fn get_item_missing_returns_none() {
+        let (_d, s) = storage();
+        assert!(s.get_item("nope").unwrap().is_none());
     }
 
     #[test]

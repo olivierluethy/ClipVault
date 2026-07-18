@@ -169,7 +169,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            crate::ipc::list_recent_items,
+            crate::ipc::list_items,
+            crate::ipc::list_pinned,
+            crate::ipc::set_pinned,
+            crate::ipc::delete_item,
+            crate::ipc::restore_item,
+            crate::ipc::copy_item,
             crate::ipc::get_privacy,
             crate::ipc::set_privacy,
         ])
