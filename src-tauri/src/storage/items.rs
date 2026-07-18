@@ -512,4 +512,17 @@ mod tests {
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].content.as_deref(), Some("brand new phrase"));
     }
+
+    #[test]
+    fn search_handles_fts_special_characters_without_error() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello world".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        // Adversarial inputs that would break a naive FTS5 query must not error.
+        for q in ["\"", "a OR b", "NEAR(x y)", "foo*", "-bar", "\" OR items_fts MATCH \"x"] {
+            let res = s.search(q, 10);
+            assert!(res.is_ok(), "search({q:?}) must not error, got {res:?}");
+        }
+        // A plain prefix still works.
+        assert_eq!(s.search("hel", 10).unwrap().len(), 1);
+    }
 }
