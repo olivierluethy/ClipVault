@@ -2,6 +2,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use rusqlite::Connection;
 
+mod items;
+pub use items::*;
+
 pub struct Storage {
     pub(crate) conn: Mutex<Connection>,
     root: PathBuf,
