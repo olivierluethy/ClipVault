@@ -12,6 +12,11 @@ import {
   onPrivacyChanged,
   folderCounts,
   onItemAdded,
+  FolderDto,
+  listFolders,
+  createFolder,
+  renameFolder,
+  deleteFolder,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
@@ -29,11 +34,16 @@ export default function App() {
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [folders, setFolders] = useState<FolderDto[]>([]);
   const parentRef = useRef<HTMLDivElement>(null);
 
   const reloadCounts = useCallback(async () => {
     const list = await folderCounts();
     setCounts(Object.fromEntries(list));
+  }, []);
+
+  const reloadFolders = useCallback(async () => {
+    setFolders(await listFolders());
   }, []);
 
   useEffect(() => {
@@ -51,6 +61,41 @@ export default function App() {
       un.then((f) => f());
     };
   }, [reloadCounts]);
+
+  useEffect(() => {
+    reloadFolders();
+    const un = onItemAdded(reloadFolders);
+    return () => {
+      un.then((f) => f());
+    };
+  }, [reloadFolders]);
+
+  const handleCreateFolder = useCallback(
+    async (name: string) => {
+      await createFolder(name);
+      reloadFolders();
+    },
+    [reloadFolders]
+  );
+
+  const handleRenameFolder = useCallback(
+    async (id: string, name: string) => {
+      await renameFolder(id, name);
+      reloadFolders();
+    },
+    [reloadFolders]
+  );
+
+  const handleDeleteFolder = useCallback(
+    async (id: string, deleteItems: boolean) => {
+      await deleteFolder(id, deleteItems);
+      if (folder === `user:${id}`) setFolder("all");
+      reloadFolders();
+      reloadCounts();
+      reload();
+    },
+    [folder, reloadFolders, reloadCounts, reload]
+  );
 
   const copy = useCallback(async (it: Item) => {
     await copyItem(it.id);
@@ -134,7 +179,15 @@ export default function App() {
 
   return (
     <div className="h-screen flex">
-      <Sidebar counts={counts} selected={folder} onSelect={setFolder} />
+      <Sidebar
+        counts={counts}
+        selected={folder}
+        onSelect={setFolder}
+        folders={folders}
+        onCreateFolder={handleCreateFolder}
+        onRenameFolder={handleRenameFolder}
+        onDeleteFolder={handleDeleteFolder}
+      />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="flex items-center justify-between p-4 border-b border-border shrink-0">
           <h1 className="text-lg font-semibold">ClipVault</h1>

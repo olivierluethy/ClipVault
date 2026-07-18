@@ -38,3 +38,28 @@ export const setPrivacy = (on: boolean) => invoke<void>("set_privacy", { on });
 export const onItemAdded = (cb: () => void) => listen("item-added", cb);
 export const onPrivacyChanged = (cb: (on: boolean) => void) =>
   listen<boolean>("privacy-changed", (e) => cb(e.payload));
+
+export type FolderDto = { id: string; name: string; item_count: number };
+
+export const listFolders = () => invoke<FolderDto[]>("list_folders");
+export const createFolder = (name: string) => invoke<string>("create_folder", { name });
+export const renameFolder = (id: string, name: string) => invoke<void>("rename_folder", { id, name });
+export const deleteFolder = (id: string, deleteItems: boolean) =>
+  invoke<void>("delete_folder", { id, deleteItems });
+export const assignItem = (itemId: string, folderId: string) =>
+  invoke<void>("assign_item", { itemId, folderId });
+export const unassignItem = (itemId: string, folderId: string) =>
+  invoke<void>("unassign_item", { itemId, folderId });
+export const foldersForItem = (itemId: string) => invoke<string[]>("folders_for_item", { itemId });
+export const listItemsInFolder = (
+  folderId: string,
+  limit = 100,
+  beforeCreatedAt?: number,
+  beforeId?: string
+) =>
+  invoke<Item[]>("list_items_in_folder", {
+    folderId,
+    limit,
+    beforeCreatedAt: beforeCreatedAt ?? null,
+    beforeId: beforeId ?? null,
+  });
