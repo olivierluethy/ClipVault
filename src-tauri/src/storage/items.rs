@@ -21,6 +21,7 @@ pub struct NewItem {
     pub item_type: ItemType,
     pub content: Option<String>,
     pub file_path: Option<String>,
+    pub preview_path: Option<String>,
     pub content_hash: String,
 }
 
@@ -74,9 +75,9 @@ impl Storage {
 
         let id = Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO items (id, type, content, file_path, content_hash, copy_count, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
-            params![id, item.item_type.as_str(), item.content, item.file_path, item.content_hash, now],
+            "INSERT INTO items (id, type, content, file_path, preview_path, content_hash, copy_count, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)",
+            params![id, item.item_type.as_str(), item.content, item.file_path, item.preview_path, item.content_hash, now],
         )?;
         Ok(InsertOutcome::Inserted(id))
     }
@@ -184,7 +185,7 @@ mod tests {
     fn insert_then_duplicate_bumps() {
         let (_d, s) = storage();
         let item = NewItem { item_type: ItemType::Text, content: Some("hi".into()),
-            file_path: None, content_hash: "h1".into() };
+            file_path: None, preview_path: None, content_hash: "h1".into() };
         let a = s.insert_or_bump(item.clone(), 1000).unwrap();
         assert!(matches!(a, InsertOutcome::Inserted(_)));
         let b = s.insert_or_bump(item.clone(), 2000).unwrap();
@@ -199,8 +200,8 @@ mod tests {
     #[test]
     fn list_recent_orders_newest_first() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,content_hash:"a".into()},100).unwrap();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("b".into()),file_path:None,content_hash:"b".into()},200).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,preview_path:None,content_hash:"a".into()},100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("b".into()),file_path:None,preview_path:None,content_hash:"b".into()},200).unwrap();
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].content.as_deref(), Some("b"));
         assert_eq!(rows[1].content.as_deref(), Some("a"));
@@ -210,7 +211,7 @@ mod tests {
     fn list_items_pages_excludes_pinned_and_deleted() {
         let (_d, s) = storage();
         let mk = |c: &str, hash: &str, t: i64| s.insert_or_bump(
-            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, content_hash:hash.into()}, t).unwrap();
+            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, preview_path:None, content_hash:hash.into()}, t).unwrap();
         mk("a","ha",100); mk("b","hb",200); mk("c","hc",300);
         // page 1: newest first
         let p1 = s.list_items(2, None, None).unwrap();
@@ -231,7 +232,7 @@ mod tests {
         let (_d, s) = storage();
         // three items with the SAME created_at (ties)
         for (c, h) in [("a","ha"),("b","hb"),("c","hc")] {
-            s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some(c.into()),file_path:None,content_hash:h.into()}, 500).unwrap();
+            s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some(c.into()),file_path:None,preview_path:None,content_hash:h.into()}, 500).unwrap();
         }
         let mut seen = Vec::new();
         let mut cursor: Option<(i64, String)> = None;
@@ -253,7 +254,7 @@ mod tests {
     #[test]
     fn soft_delete_hides_then_restore_then_purge() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("x".into()),file_path:None,content_hash:"hx".into()},100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("x".into()),file_path:None,preview_path:None,content_hash:"hx".into()},100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.soft_delete(&id, 500).unwrap();
         assert_eq!(s.list_items(10, None, None).unwrap().len(), 0);   // hidden
@@ -271,12 +272,12 @@ mod tests {
     #[test]
     fn recopy_undeletes_soft_deleted_item() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,content_hash:"hz".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,preview_path:None,content_hash:"hz".into()}, 100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.soft_delete(&id, 200).unwrap();
         assert_eq!(s.list_items(10, None, None).unwrap().len(), 0); // hidden
         // re-copy same content -> should reappear (un-deleted) and bump
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,content_hash:"hz".into()}, 300).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,preview_path:None,content_hash:"hz".into()}, 300).unwrap();
         let rows = s.list_items(10, None, None).unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].copy_count >= 2);
@@ -285,7 +286,7 @@ mod tests {
     #[test]
     fn set_pinned_toggles() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("p".into()),file_path:None,content_hash:"hp".into()},100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("p".into()),file_path:None,preview_path:None,content_hash:"hp".into()},100).unwrap();
         let id = s.list_items(10,None,None).unwrap()[0].id.clone();
         s.set_pinned(&id, true).unwrap();
         assert_eq!(s.list_pinned().unwrap().len(), 1);

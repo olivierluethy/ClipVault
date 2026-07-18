@@ -38,7 +38,7 @@ pub fn process_event(
     let new_item = match item_type {
         ItemType::Text => {
             let text = String::from_utf8_lossy(&ev.bytes).into_owned();
-            NewItem { item_type, content: Some(text), file_path: None, content_hash: hash }
+            NewItem { item_type, content: Some(text), file_path: None, preview_path: None, content_hash: hash }
         }
         ItemType::Image | ItemType::Gif => {
             // Only write the file if this is a new hash; check first to avoid orphan files.
@@ -48,8 +48,12 @@ pub fn process_event(
             if !path.exists() {
                 std::fs::write(&path, &ev.bytes)?;
             }
+            let thumbs = storage.attachments_dir().join("thumbs");
+            let preview = crate::thumbnail::generate(&ev.bytes, &thumbs, &hash)
+                .map(|p| p.to_string_lossy().into_owned());
             NewItem { item_type, content: None,
-                file_path: Some(path.to_string_lossy().into_owned()), content_hash: hash }
+                file_path: Some(path.to_string_lossy().into_owned()),
+                preview_path: preview, content_hash: hash }
         }
     };
 
@@ -91,6 +95,39 @@ mod tests {
         assert_eq!(rows[0].item_type, "image");
         let path = rows[0].file_path.clone().unwrap();
         assert_eq!(std::fs::read(path).unwrap(), png);
+        // Not a decodable image, so thumbnail generation fails non-fatally.
+        assert_eq!(rows[0].preview_path, None);
+    }
+
+    #[test]
+    fn text_event_has_no_preview_path() {
+        let (_d, s) = storage();
+        process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: b"hello".to_vec() }, &std::sync::Mutex::new(None)).unwrap();
+        let rows = s.list_recent(10).unwrap();
+        assert_eq!(rows[0].preview_path, None);
+    }
+
+    #[test]
+    fn valid_image_gets_webp_thumbnail_preview_path() {
+        let (_d, s) = storage();
+        // 2x2 white PNG, real decodable image bytes.
+        const B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8//8/AwMDEwMDAwMDAwAkBgMB/DXemwAAAABJRU5ErkJggg==";
+        const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut png = Vec::new();
+        let (mut buf, mut bits) = (0u32, 0u32);
+        for &c in B64.as_bytes() {
+            if c == b'=' { break }
+            let v = T.iter().position(|&x| x == c).unwrap() as u32;
+            buf = (buf << 6) | v; bits += 6;
+            if bits >= 8 { bits -= 8; png.push((buf >> bits) as u8); }
+        }
+
+        let out = process_event(&s, ClipEvent{ mime: "image/png".into(), bytes: png }, &std::sync::Mutex::new(None)).unwrap();
+        assert!(matches!(out, Some(InsertOutcome::Inserted(_))));
+        let rows = s.list_recent(10).unwrap();
+        let preview = rows[0].preview_path.clone().expect("preview_path should be set");
+        assert!(preview.ends_with(".webp"));
+        assert!(std::fs::metadata(&preview).unwrap().len() > 0);
     }
 
     #[test]

@@ -5,6 +5,7 @@ mod watcher;
 mod capture;
 mod state;
 mod ipc;
+mod thumbnail;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

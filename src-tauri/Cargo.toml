@@ -31,6 +31,8 @@ uuid = { version = "1", features = ["v4"] }
 x11-clipboard = "0.9"
 x11rb = "0.13"
 anyhow = "1"
+image = { version = "0.25", default-features = false, features = ["png","jpeg","gif","bmp","webp"] }
+webp = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
