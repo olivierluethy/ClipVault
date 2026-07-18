@@ -28,6 +28,7 @@ import {
   setSettingStr,
   openUrl,
   hideWindow,
+  getHotkey,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
@@ -57,6 +58,7 @@ export default function App() {
   const [qrText, setQrText] = useState<string | null>(null);
   const [expandItem, setExpandItem] = useState<Item | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [hotkey, setHotkey] = useState("Ctrl+Alt+V");
   const [draggingIds, setDraggingIds] = useState<string[] | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -95,6 +97,11 @@ export default function App() {
     getSettingStr("onboarded").then((v) => {
       if (v !== "1") setShowWelcome(true);
     });
+  }, []);
+
+  // Keep the open-hotkey label (shown in the Welcome tips) in sync with settings.
+  useEffect(() => {
+    getHotkey().then(setHotkey);
   }, []);
 
   const dismissWelcome = useCallback(() => {
@@ -816,7 +823,7 @@ export default function App() {
               images — so you can find and reuse it later.
             </p>
             <ul className="text-sm text-fg-muted space-y-1 list-disc pl-5">
-              <li>Press <span className="text-fg font-medium">Ctrl+Alt+V</span> anytime to open it.</li>
+              <li>Press <span className="text-fg font-medium">{hotkey}</span> anytime to open it.</li>
               <li>Use <span className="text-fg font-medium">Privacy</span> to pause capture; <span className="text-fg font-medium">+ Add current</span> saves one item on demand.</li>
               <li><span className="text-fg font-medium">Ctrl+F</span> searches; the <span className="text-fg font-medium">⚙</span> menu has retention, backups, and export.</li>
             </ul>
