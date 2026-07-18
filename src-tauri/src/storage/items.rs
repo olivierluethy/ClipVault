@@ -33,8 +33,22 @@ pub struct ItemDto {
     pub item_type: String,
     pub content: Option<String>,
     pub file_path: Option<String>,
+    pub preview_path: Option<String>,
     pub copy_count: i64,
+    pub pinned: bool,
     pub created_at: i64,
+    pub updated_at: i64,
+}
+
+const ITEM_COLS: &str =
+    "id, type, content, file_path, preview_path, copy_count, pinned, created_at, updated_at";
+
+fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
+    Ok(ItemDto {
+        id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?, file_path: r.get(3)?,
+        preview_path: r.get(4)?, copy_count: r.get(5)?,
+        pinned: r.get::<_, i64>(6)? != 0, created_at: r.get(7)?, updated_at: r.get(8)?,
+    })
 }
 
 impl Storage {
@@ -69,15 +83,48 @@ impl Storage {
 
     pub fn list_recent(&self, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, type, content, file_path, copy_count, created_at
-             FROM items ORDER BY created_at DESC LIMIT ?1",
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {ITEM_COLS} FROM items ORDER BY created_at DESC LIMIT ?1"
+        ))?;
+        let rows: rusqlite::Result<Vec<ItemDto>> = stmt.query_map(params![limit], map_item)?.collect();
+        rows
+    }
+
+    // Wired to an IPC command in a later task; exercised directly by tests until then.
+    #[allow(dead_code)]
+    pub fn list_items(&self, limit: i64, before: Option<i64>) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL AND pinned = 0 AND (?2 IS NULL OR created_at < ?2)
+             ORDER BY created_at DESC LIMIT ?1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows: rusqlite::Result<Vec<ItemDto>> = stmt.query_map(params![limit, before], map_item)?.collect();
+        rows
+    }
+
+    // Wired to an IPC command in a later task; exercised directly by tests until then.
+    #[allow(dead_code)]
+    pub fn list_pinned(&self) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC"
+        ))?;
+        let rows: rusqlite::Result<Vec<ItemDto>> = stmt.query_map([], map_item)?.collect();
+        rows
+    }
+
+    // Wired to an IPC command in a later task; exercised directly by tests until then.
+    #[allow(dead_code)]
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET pinned = ?1 WHERE id = ?2",
+            params![pinned as i64, id],
         )?;
-        let rows = stmt.query_map(params![limit], |r| Ok(ItemDto {
-            id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?,
-            file_path: r.get(3)?, copy_count: r.get(4)?, created_at: r.get(5)?,
-        }))?;
-        rows.collect()
+        Ok(())
     }
 }
 
@@ -115,5 +162,35 @@ mod tests {
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].content.as_deref(), Some("b"));
         assert_eq!(rows[1].content.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn list_items_pages_excludes_pinned_and_deleted() {
+        let (_d, s) = storage();
+        let mk = |c: &str, hash: &str, t: i64| s.insert_or_bump(
+            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, content_hash:hash.into()}, t).unwrap();
+        mk("a","ha",100); mk("b","hb",200); mk("c","hc",300);
+        // page 1: newest first
+        let p1 = s.list_items(2, None).unwrap();
+        assert_eq!(p1.iter().map(|i| i.content.clone().unwrap()).collect::<Vec<_>>(), vec!["c","b"]);
+        // page 2 via cursor = last created_at
+        let p2 = s.list_items(2, Some(p1.last().unwrap().created_at)).unwrap();
+        assert_eq!(p2.iter().map(|i| i.content.clone().unwrap()).collect::<Vec<_>>(), vec!["a"]);
+        // pin "b" -> excluded from list_items, present in list_pinned
+        let id_b = s.list_items(10, None).unwrap().into_iter().find(|i| i.content.as_deref()==Some("b")).unwrap().id;
+        s.set_pinned(&id_b, true).unwrap();
+        assert!(s.list_items(10, None).unwrap().iter().all(|i| i.content.as_deref()!=Some("b")));
+        assert_eq!(s.list_pinned().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn set_pinned_toggles() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("p".into()),file_path:None,content_hash:"hp".into()},100).unwrap();
+        let id = s.list_items(10,None).unwrap()[0].id.clone();
+        s.set_pinned(&id, true).unwrap();
+        assert_eq!(s.list_pinned().unwrap().len(), 1);
+        s.set_pinned(&id, false).unwrap();
+        assert_eq!(s.list_pinned().unwrap().len(), 0);
     }
 }
