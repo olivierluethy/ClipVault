@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crate::classifier::{classify, extension_for};
+use crate::classifier::{classify, classify_text, extension_for};
 use crate::hashing::sha256_hex;
 use crate::storage::{ItemType, NewItem, InsertOutcome, Storage};
 use crate::watcher::ClipEvent;
@@ -36,9 +36,10 @@ pub fn process_event(
     let now = chrono_now_millis();
 
     let new_item = match item_type {
-        ItemType::Text => {
+        ItemType::Text | ItemType::Link | ItemType::Number | ItemType::Color => {
             let text = String::from_utf8_lossy(&ev.bytes).into_owned();
-            NewItem { item_type, content: Some(text), file_path: None, preview_path: None, content_hash: hash }
+            let refined_type = classify_text(&text);
+            NewItem { item_type: refined_type, content: Some(text), file_path: None, preview_path: None, content_hash: hash }
         }
         ItemType::Image | ItemType::Gif => {
             // Only write the file if this is a new hash; check first to avoid orphan files.
@@ -103,6 +104,18 @@ mod tests {
         let path = rows[0].file_path.clone().unwrap();
         assert_eq!(std::fs::read(path).unwrap(), png);
         // Not a decodable image, so thumbnail generation fails non-fatally.
+        assert_eq!(rows[0].preview_path, None);
+    }
+
+    #[test]
+    fn link_text_stored_as_link_type() {
+        let (_d, s) = storage();
+        let out = process_event(&s, ClipEvent{ mime: "UTF8_STRING".into(), bytes: b"https://example.com/x".to_vec() }, &std::sync::Mutex::new(None)).unwrap();
+        assert!(matches!(out, Some(InsertOutcome::Inserted(_))));
+        let rows = s.list_recent(10).unwrap();
+        assert_eq!(rows[0].item_type, "link");
+        assert_eq!(rows[0].content.as_deref(), Some("https://example.com/x"));
+        assert_eq!(rows[0].file_path, None);
         assert_eq!(rows[0].preview_path, None);
     }
 

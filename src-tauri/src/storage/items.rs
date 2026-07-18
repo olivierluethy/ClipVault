@@ -3,16 +3,30 @@ use uuid::Uuid;
 use super::Storage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum ItemType { Text, Image, Gif }
+pub enum ItemType { Text, Image, Gif, Link, Number, Color }
 
 impl ItemType {
     pub fn as_str(&self) -> &'static str {
-        match self { ItemType::Text => "text", ItemType::Image => "image", ItemType::Gif => "gif" }
+        match self {
+            ItemType::Text => "text",
+            ItemType::Image => "image",
+            ItemType::Gif => "gif",
+            ItemType::Link => "link",
+            ItemType::Number => "number",
+            ItemType::Color => "color",
+        }
     }
     // Paired with as_str(); used when reading typed items back in a later phase.
     #[allow(dead_code)]
     pub fn from_str(s: &str) -> ItemType {
-        match s { "image" => ItemType::Image, "gif" => ItemType::Gif, _ => ItemType::Text }
+        match s {
+            "image" => ItemType::Image,
+            "gif" => ItemType::Gif,
+            "link" => ItemType::Link,
+            "number" => ItemType::Number,
+            "color" => ItemType::Color,
+            _ => ItemType::Text,
+        }
     }
 }
 
