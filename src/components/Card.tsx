@@ -208,18 +208,21 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
       <span className="min-w-0 flex-1 truncate font-mono text-sm text-fg/90">{item.content}</span>
     );
   }
-  // image / gif
+  // image / gif — wrap in a flex-1 zone (like the other types) so the right-hand
+  // meta/action cluster still docks to the row's right edge, not next to the thumbnail.
   return thumb ? (
-    <img
-      src={convertFileSrc(thumb)}
-      alt=""
-      draggable={false}
-      className="max-h-14 cursor-zoom-in rounded-md border border-border"
-      onClick={(e) => {
-        e.stopPropagation();
-        onZoom();
-      }}
-    />
+    <span className="flex min-w-0 flex-1 items-center">
+      <img
+        src={convertFileSrc(thumb)}
+        alt=""
+        draggable={false}
+        className="max-h-14 cursor-zoom-in rounded-md border border-border"
+        onClick={(e) => {
+          e.stopPropagation();
+          onZoom();
+        }}
+      />
+    </span>
   ) : (
     <span className="flex-1 font-mono text-sm text-fg-muted">[image]</span>
   );
