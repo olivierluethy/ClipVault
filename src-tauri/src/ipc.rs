@@ -25,6 +25,22 @@ pub fn list_pinned(state: State<AppState>) -> Result<Vec<ItemDto>, String> {
 }
 
 #[tauri::command]
+pub fn list_by_type(
+    state: State<AppState>,
+    type_str: String,
+    limit: i64,
+    before_created_at: Option<i64>,
+    before_id: Option<String>,
+) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_by_type(&type_str, limit, before_created_at, before_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn folder_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
+    state.storage.folder_counts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn set_pinned(state: State<AppState>, id: String, pinned: bool) -> Result<(), String> {
     state.storage.set_pinned(&id, pinned).map_err(|e| e.to_string())
 }

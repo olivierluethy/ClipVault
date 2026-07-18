@@ -130,6 +130,41 @@ impl Storage {
         Ok(rows)
     }
 
+    pub fn list_by_type(
+        &self,
+        type_str: &str,
+        limit: i64,
+        before_created_at: Option<i64>,
+        before_id: Option<&str>,
+    ) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL AND type = ?4
+               AND (?2 IS NULL
+                    OR created_at < ?2
+                    OR (created_at = ?2 AND id < ?3))
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows: Vec<ItemDto> = stmt
+            .query_map(rusqlite::params![limit, before_created_at, before_id, type_str], map_item)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    pub fn folder_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT type, COUNT(*) FROM items WHERE deleted_at IS NULL GROUP BY type"
+        )?;
+        let rows: Vec<(String, i64)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     pub fn list_pinned(&self) -> rusqlite::Result<Vec<ItemDto>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
@@ -343,5 +378,32 @@ mod tests {
         assert_eq!(s.list_pinned().unwrap().len(), 1);
         s.set_pinned(&id, false).unwrap();
         assert_eq!(s.list_pinned().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn list_by_type_filters_and_includes_pinned() {
+        let (_d, s) = storage();
+        let mk = |ty: ItemType, c: &str, h: &str, t: i64| s.insert_or_bump(NewItem{item_type:ty,content:Some(c.into()),file_path:None,preview_path:None,content_hash:h.into()}, t).unwrap();
+        mk(ItemType::Text,"a","ha",100);
+        mk(ItemType::Link,"https://x","hb",200);
+        mk(ItemType::Link,"https://y","hc",300);
+        // pin one link -> still appears in the link folder
+        let link_id = s.list_by_type("link", 10, None, None).unwrap()[0].id.clone();
+        s.set_pinned(&link_id, true).unwrap();
+        let links = s.list_by_type("link", 10, None, None).unwrap();
+        assert_eq!(links.len(), 2);
+        assert!(links.iter().all(|i| i.item_type == "link"));
+        let texts = s.list_by_type("text", 10, None, None).unwrap();
+        assert_eq!(texts.len(), 1);
+    }
+
+    #[test]
+    fn folder_counts_groups_by_type() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,preview_path:None,content_hash:"ha".into()},1).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Color,content:Some("#fff".into()),file_path:None,preview_path:None,content_hash:"hb".into()},2).unwrap();
+        let counts: std::collections::HashMap<String,i64> = s.folder_counts().unwrap().into_iter().collect();
+        assert_eq!(counts.get("text"), Some(&1));
+        assert_eq!(counts.get("color"), Some(&1));
     }
 }

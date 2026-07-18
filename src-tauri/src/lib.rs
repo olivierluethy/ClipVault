@@ -171,6 +171,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             crate::ipc::list_items,
             crate::ipc::list_pinned,
+            crate::ipc::list_by_type,
+            crate::ipc::folder_counts,
             crate::ipc::set_pinned,
             crate::ipc::delete_item,
             crate::ipc::restore_item,
