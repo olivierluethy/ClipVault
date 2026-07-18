@@ -1,11 +1,113 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
-import { Item } from "../api";
+import { FolderDto, Item } from "../api";
+
+function FolderMenu(props: {
+  folders: FolderDto[];
+  onClose: () => void;
+  loadMemberships: (itemId: string) => Promise<string[]>;
+  onToggleFolder: (folderId: string, checked: boolean) => void;
+  onCreateAndAssign: (name: string) => void;
+  itemId: string;
+}) {
+  const [memberIds, setMemberIds] = useState<string[] | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    props.loadMemberships(props.itemId).then((ids) => {
+      if (!cancelled) setMemberIds(ids);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.itemId, props.loadMemberships]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        props.onClose();
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.onClose();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [props.onClose]);
+
+  const handleNewFolder = () => {
+    const name = window.prompt("New folder name");
+    const trimmed = name?.trim();
+    if (trimmed) props.onCreateAndAssign(trimmed);
+    props.onClose();
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-full mt-1 z-20 w-56 max-h-64 overflow-y-auto rounded border border-border bg-bg-raised shadow-lg p-1"
+    >
+      {memberIds === null ? (
+        <div className="px-2 py-1.5 text-xs text-fg-muted">Loading…</div>
+      ) : (
+        <>
+          {props.folders.length === 0 && (
+            <div className="px-2 py-1.5 text-xs text-fg-muted">No folders yet</div>
+          )}
+          {props.folders.map((f) => {
+            const checked = memberIds.includes(f.id);
+            return (
+              <label
+                key={f.id}
+                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg hover:bg-bg-card cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setMemberIds((ids) =>
+                      ids
+                        ? next
+                          ? [...ids, f.id]
+                          : ids.filter((id) => id !== f.id)
+                        : ids
+                    );
+                    props.onToggleFolder(f.id, next);
+                  }}
+                  className="shrink-0"
+                />
+                <span className="flex-1 truncate">{f.name}</span>
+              </label>
+            );
+          })}
+        </>
+      )}
+      <button
+        onClick={handleNewFolder}
+        className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
+      >
+        <span aria-hidden>＋</span>
+        <span>New folder…</span>
+      </button>
+    </div>
+  );
+}
 
 export function Card(props: {
   item: Item;
   selected: boolean;
   editing: boolean;
+  folders: FolderDto[];
+  loadMemberships: (itemId: string) => Promise<string[]>;
+  onToggleFolder: (folderId: string, checked: boolean) => void;
+  onCreateAndAssign: (name: string) => void;
   onCopy: () => void;
   onDelete: () => void;
   onPin: () => void;
@@ -23,6 +125,7 @@ export function Card(props: {
     item.item_type === "color";
   const [draft, setDraft] = useState(item.content ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
 
   useEffect(() => {
     if (editing) {
@@ -118,6 +221,33 @@ export function Card(props: {
           >
             📌
           </button>
+          <div className="relative">
+            <button
+              title="Add to folder"
+              aria-label="Add to folder"
+              aria-haspopup="true"
+              aria-expanded={folderMenuOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFolderMenuOpen((v) => !v);
+              }}
+              className={`rounded px-1.5 py-1 text-sm hover:bg-bg-raised ${folderMenuOpen ? "text-accent" : "text-fg-muted"}`}
+            >
+              📁
+            </button>
+            {folderMenuOpen && (
+              <FolderMenu
+                itemId={item.id}
+                folders={props.folders}
+                loadMemberships={props.loadMemberships}
+                onToggleFolder={props.onToggleFolder}
+                onCreateAndAssign={(name) => {
+                  props.onCreateAndAssign(name);
+                }}
+                onClose={() => setFolderMenuOpen(false)}
+              />
+            )}
+          </div>
           {contentBased && (
             <button
               title="Edit"

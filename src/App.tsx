@@ -17,6 +17,9 @@ import {
   createFolder,
   renameFolder,
   deleteFolder,
+  assignItem,
+  unassignItem,
+  foldersForItem,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
@@ -135,6 +138,28 @@ export default function App() {
     [reload]
   );
 
+  const loadMemberships = useCallback((itemId: string) => foldersForItem(itemId), []);
+
+  const toggleFolder = useCallback(
+    async (it: Item, folderId: string, checked: boolean) => {
+      if (checked) await assignItem(it.id, folderId);
+      else await unassignItem(it.id, folderId);
+      reloadFolders();
+      reload();
+    },
+    [reloadFolders, reload]
+  );
+
+  const createAndAssign = useCallback(
+    async (it: Item, name: string) => {
+      const id = await createFolder(name);
+      await assignItem(it.id, id);
+      reloadFolders();
+      reload();
+    },
+    [reloadFolders, reload]
+  );
+
   const { sel, setSel } = useKeyboardNav(flatItems, {
     copy,
     del,
@@ -213,6 +238,10 @@ export default function App() {
                   item={it}
                   selected={sel === i}
                   editing={editingId === it.id}
+                  folders={folders}
+                  loadMemberships={loadMemberships}
+                  onToggleFolder={(folderId, checked) => toggleFolder(it, folderId, checked)}
+                  onCreateAndAssign={(name) => createAndAssign(it, name)}
                   onCopy={() => {
                     setSel(i);
                     copy(it);
@@ -261,6 +290,12 @@ export default function App() {
                         item={row.item}
                         selected={flatIndex >= 0 && sel === flatIndex}
                         editing={editingId === row.item.id}
+                        folders={folders}
+                        loadMemberships={loadMemberships}
+                        onToggleFolder={(folderId, checked) =>
+                          toggleFolder(row.item, folderId, checked)
+                        }
+                        onCreateAndAssign={(name) => createAndAssign(row.item, name)}
                         onCopy={() => copy(row.item)}
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
