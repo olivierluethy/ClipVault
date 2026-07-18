@@ -38,6 +38,9 @@ export const setPinned = (id: string, pinned: boolean) => invoke<void>("set_pinn
 export const updateContent = (id: string, content: string) => invoke<void>("update_content", { id, content });
 export const getPrivacy = () => invoke<boolean>("get_privacy");
 export const setPrivacy = (on: boolean) => invoke<void>("set_privacy", { on });
+/** Read the CURRENT clipboard and store it now, even while privacy mode is on.
+ *  Resolves true if something was added/bumped, false if the clipboard was empty. */
+export const quickAdd = () => invoke<boolean>("quick_add");
 export const onItemAdded = (cb: () => void) => listen("item-added", cb);
 export const onPrivacyChanged = (cb: (on: boolean) => void) =>
   listen<boolean>("privacy-changed", (e) => cb(e.payload));

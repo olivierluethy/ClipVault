@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{State, Emitter};
 use std::sync::atomic::Ordering;
 use crate::state::AppState;
 use crate::storage::{ItemDto, FolderDto};
@@ -189,12 +189,14 @@ pub fn get_privacy(state: State<AppState>) -> bool {
 pub fn set_privacy(
     state: State<AppState>,
     privacy_menu: State<crate::PrivacyMenu>,
+    tray: State<crate::TrayState>,
     on: bool,
 ) -> Result<(), String> {
     state.privacy.store(on, Ordering::Relaxed);
     state.storage.set_bool("privacy_mode", on).map_err(|e| e.to_string())?;
-    // Keep the tray checkmark in sync with UI-initiated toggles too.
+    // Keep the tray checkmark and icon in sync with UI-initiated toggles too.
     let _ = privacy_menu.0.set_checked(on);
+    tray.apply(on);
     Ok(())
 }
 
@@ -207,6 +209,32 @@ pub fn get_exclude_secrets(state: State<AppState>) -> bool {
 pub fn set_exclude_secrets(state: State<AppState>, on: bool) -> Result<(), String> {
     state.exclude_secrets.store(on, Ordering::Relaxed);
     state.storage.set_bool("exclude_secrets", on).map_err(|e| e.to_string())
+}
+
+/// Shared core for "Quick Add": read the CURRENT clipboard contents right now and
+/// store them, bypassing the watcher loop entirely — so it works even while privacy
+/// mode is on (privacy only pauses passive capture; this is a deliberate, explicit
+/// user action). Emits `item-added` and returns `Ok(true)` if something was
+/// inserted/bumped, `Ok(false)` if the clipboard was empty/unreadable. Used by both
+/// the `quick_add` IPC command (UI button) and the tray "Quick Add" menu item.
+pub(crate) fn quick_add_core(
+    app: &tauri::AppHandle,
+    state: &AppState,
+) -> Result<bool, String> {
+    let Some(ev) = crate::watcher::x11::read_clipboard_once() else { return Ok(false) };
+    let added = crate::capture::process_event(&state.storage, ev, &state.last_self_copy)
+        .map_err(|e| e.to_string())?
+        .is_some();
+    if added {
+        let _ = app.emit("item-added", ());
+    }
+    Ok(added)
+}
+
+/// One-shot "Quick Add" invoked from the UI. See [`quick_add_core`].
+#[tauri::command]
+pub fn quick_add(app: tauri::AppHandle, state: State<AppState>) -> Result<bool, String> {
+    quick_add_core(&app, &state)
 }
 
 #[tauri::command]

@@ -20,6 +20,34 @@ use tauri::{Manager, Emitter};
 /// tray checkmark in sync, not just tray-initiated toggles.
 pub(crate) struct PrivacyMenu(pub tauri::menu::CheckMenuItem<tauri::Wry>);
 
+/// The tray icon plus its two states' images, kept in managed state so BOTH the
+/// tray-initiated and UI-initiated privacy toggles can swap the tray glyph — giving
+/// the user an at-a-glance indicator that passive capture is paused.
+pub(crate) struct TrayState {
+    tray: tauri::tray::TrayIcon<tauri::Wry>,
+    normal: tauri::image::Image<'static>,
+    privacy: tauri::image::Image<'static>,
+}
+
+impl TrayState {
+    /// Point the tray at the privacy glyph when capture is paused, else the normal one.
+    pub(crate) fn apply(&self, privacy_on: bool) {
+        let icon = if privacy_on { self.privacy.clone() } else { self.normal.clone() };
+        let _ = self.tray.set_icon(Some(icon));
+    }
+}
+
+/// Decode an embedded PNG into an owned `tauri::image::Image` (RGBA). Done via the
+/// `image` crate rather than `Image::from_bytes` so we don't depend on tauri's
+/// optional `image-png` feature. Panics only on a corrupt *compiled-in* asset.
+fn decode_icon(bytes: &[u8]) -> tauri::image::Image<'static> {
+    let rgba = image::load_from_memory(bytes)
+        .expect("embedded tray icon is a valid image")
+        .to_rgba8();
+    let (w, h) = rgba.dimensions();
+    tauri::image::Image::new_owned(rgba.into_raw(), w, h)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -163,6 +191,8 @@ pub fn run() {
             use tauri::tray::TrayIconBuilder;
 
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+            let quickadd_i =
+                MenuItem::with_id(app, "quick_add", "Quick Add current clipboard", true, None::<&str>)?;
             let priv_i = CheckMenuItem::with_id(
                 app,
                 "privacy",
@@ -172,17 +202,37 @@ pub fn run() {
                 None::<&str>,
             )?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open_i, &priv_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&open_i, &quickadd_i, &priv_i, &quit_i])?;
 
             app.manage(PrivacyMenu(priv_i.clone()));
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            // Two tray glyphs: the normal app icon, and a "privacy paused" variant so
+            // the tray itself signals when passive capture is off.
+            let normal_icon = decode_icon(include_bytes!("../icons/32x32.png"));
+            let privacy_icon = decode_icon(include_bytes!("../icons/tray-privacy.png"));
+
+            let tray = TrayIconBuilder::new()
+                .icon(if privacy_init { privacy_icon.clone() } else { normal_icon.clone() })
                 .menu(&menu)
                 .tooltip("ClipVault")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => { if let Some(w) = app.get_webview_window("main") { let _ = w.show(); let _ = w.set_focus(); } }
                     "quit" => { app.exit(0); }
+                    "quick_add" => {
+                        use tauri_plugin_notification::NotificationExt;
+                        let state = app.state::<crate::state::AppState>();
+                        let added = crate::ipc::quick_add_core(app, &state).unwrap_or(false);
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("ClipVault")
+                            .body(if added {
+                                "Saved current clipboard"
+                            } else {
+                                "Clipboard empty — nothing saved"
+                            })
+                            .show();
+                    }
                     "privacy" => {
                         let state = app.state::<crate::state::AppState>();
                         let now = !state.privacy.load(std::sync::atomic::Ordering::Relaxed);
@@ -192,10 +242,13 @@ pub fn run() {
 
                         let menu_state = app.state::<PrivacyMenu>();
                         let _ = menu_state.0.set_checked(now);
+                        app.state::<TrayState>().apply(now);
                     }
                     _ => {}
                 })
                 .build(app)?;
+
+            app.manage(TrayState { tray, normal: normal_icon, privacy: privacy_icon });
 
             Ok(())
         })
@@ -224,6 +277,7 @@ pub fn run() {
             crate::ipc::set_privacy,
             crate::ipc::get_exclude_secrets,
             crate::ipc::set_exclude_secrets,
+            crate::ipc::quick_add,
             crate::ipc::get_fetch_link_metadata,
             crate::ipc::set_fetch_link_metadata,
         ])

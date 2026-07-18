@@ -39,6 +39,61 @@ impl X11Backend {
     }
 }
 
+/// One-shot read of the CURRENT clipboard contents, independent of the watcher loop
+/// (works even while the watcher is paused by privacy mode). Opens a fresh
+/// `x11_clipboard::Clipboard`, uses `load` (not `load_wait`, which blocks for a
+/// *change*) with a short timeout so callers on a command thread can't hang: tries
+/// UTF8_STRING first, then probes the image MIME targets in priority order. Returns
+/// `None` on any connection error or if the clipboard is empty/unset.
+pub fn read_clipboard_once() -> Option<ClipEvent> {
+    let clipboard = Clipboard::new().ok()?;
+    let selection = clipboard.getter.atoms.clipboard;
+    let property = clipboard.getter.atoms.property;
+    let utf8 = clipboard.getter.atoms.utf8_string;
+
+    if let Ok(bytes) = clipboard.load(selection, utf8, property, Duration::from_millis(800)) {
+        if !bytes.is_empty() {
+            return Some(ClipEvent { mime: "UTF8_STRING".to_string(), bytes });
+        }
+    }
+
+    for mime in IMAGE_MIMES {
+        let Ok(atom) = clipboard.getter.get_atom(mime) else { continue };
+        if let Ok(bytes) = clipboard.load(selection, atom, property, Duration::from_millis(300)) {
+            if !bytes.is_empty() {
+                return Some(ClipEvent { mime: mime.to_string(), bytes });
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Live-X11 round-trip: put a known value on the CLIPBOARD selection, then read it
+    /// back with `read_clipboard_once` — proving `load` returns the *current* value
+    /// (not `load_wait`'s block-for-change semantics). Ignored by default because it
+    /// needs a running X server; run with `cargo test -- --ignored`.
+    #[test]
+    #[ignore]
+    fn read_clipboard_once_returns_current_text() {
+        let clipboard = Clipboard::new().expect("open X clipboard");
+        let atoms = &clipboard.setter.atoms;
+        clipboard
+            .store(atoms.clipboard, atoms.utf8_string, &b"quick-add-probe"[..])
+            .expect("store text on CLIPBOARD");
+        // Let the setter thread take selection ownership before we read.
+        std::thread::sleep(Duration::from_millis(200));
+
+        let ev = read_clipboard_once().expect("read the current clipboard value");
+        assert_eq!(ev.mime, "UTF8_STRING");
+        assert_eq!(ev.bytes, b"quick-add-probe");
+    }
+}
+
 impl ClipboardBackend for X11Backend {
     fn run(self: Box<Self>, tx: Sender<ClipEvent>, privacy: Arc<AtomicBool>, exclude_secrets: Arc<AtomicBool>) {
         let selection = self.clipboard.getter.atoms.clipboard;

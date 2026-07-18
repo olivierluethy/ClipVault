@@ -11,6 +11,7 @@ import {
   updateContent,
   getPrivacy,
   setPrivacy,
+  quickAdd,
   onPrivacyChanged,
   folderCounts,
   onItemAdded,
@@ -37,6 +38,7 @@ export default function App() {
   const [folder, setFolder] = useState("all");
   const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder);
   const [privacy, setPriv] = useState(false);
+  const [quickMsg, setQuickMsg] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Item[]>([]);
@@ -357,6 +359,16 @@ export default function App() {
     setPriv(next);
   };
 
+  const quickMsgTimer = useRef<number | null>(null);
+  const doQuickAdd = useCallback(async () => {
+    const added = await quickAdd();
+    // A successful add refreshes the timeline via the `item-added` event listeners;
+    // show a brief confirmation either way (esp. useful while privacy mode is on).
+    setQuickMsg(added ? "Added current clipboard ✓" : "Clipboard empty — nothing to add");
+    if (quickMsgTimer.current) window.clearTimeout(quickMsgTimer.current);
+    quickMsgTimer.current = window.setTimeout(() => setQuickMsg(null), 1600);
+  }, []);
+
   const isEmpty = isSearching ? rows.length === 0 : rows.length === 0 && pinned.length === 0;
 
   return (
@@ -387,6 +399,13 @@ export default function App() {
             placeholder="Search…"
             className="flex-1 min-w-0 px-3 py-1 rounded border border-border bg-bg-raised text-fg text-sm placeholder:text-fg-muted focus:outline-none focus:border-accent"
           />
+          <button
+            onClick={doQuickAdd}
+            title="Save the current clipboard now (works even in Privacy mode)"
+            className="px-3 py-1 rounded border border-border text-sm shrink-0 text-fg-muted hover:text-fg hover:border-accent"
+          >
+            + Add current
+          </button>
           <button
             onClick={toggle}
             className={`px-3 py-1 rounded border border-border text-sm shrink-0 ${
@@ -522,6 +541,12 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {quickMsg && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg border border-border bg-bg-raised text-sm text-fg shadow-lg">
+          {quickMsg}
+        </div>
+      )}
 
       <ZoomModal item={zoom} onClose={() => setZoom(null)} />
       <UndoToast
