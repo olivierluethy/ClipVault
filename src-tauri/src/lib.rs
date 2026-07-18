@@ -5,6 +5,8 @@ mod watcher;
 mod capture;
 mod state;
 mod ipc;
+mod thumbnail;
+mod clipboard_writer;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -58,11 +60,13 @@ pub fn run() {
             let privacy_init = storage.get_bool("privacy_mode", false);
             let privacy = Arc::new(AtomicBool::new(privacy_init));
             let last_self_copy: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let writer = crate::clipboard_writer::spawn();
 
             app.manage(crate::state::AppState {
                 storage: storage.clone(),
                 privacy: privacy.clone(),
                 last_self_copy: last_self_copy.clone(),
+                writer,
             });
 
             // Enable autostart on first run only; respects a user's later choice to disable it.
@@ -165,7 +169,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            crate::ipc::list_recent_items,
+            crate::ipc::list_items,
+            crate::ipc::list_pinned,
+            crate::ipc::list_by_type,
+            crate::ipc::folder_counts,
+            crate::ipc::set_pinned,
+            crate::ipc::delete_item,
+            crate::ipc::restore_item,
+            crate::ipc::update_content,
+            crate::ipc::copy_item,
             crate::ipc::get_privacy,
             crate::ipc::set_privacy,
         ])

@@ -8,9 +8,11 @@ pub struct AppState {
     pub privacy: Arc<AtomicBool>,
     /// Content hash of the last item the app itself copied to the clipboard (one-shot).
     /// Consulted by `capture::process_event` to suppress re-capturing the app's own copy-back.
-    /// No copy-back command exists yet (this is a forward-looking seam), so nothing sets
-    /// this via `AppState` today; the consumer thread holds its own clone of the same
-    /// `Arc<Mutex<..>>` and passes it into `process_event` on every event.
-    #[allow(dead_code)]
+    /// Set by the `copy_item` IPC command before it writes to the clipboard; the consumer
+    /// thread holds its own clone of the same `Arc<Mutex<..>>` and passes it into
+    /// `process_event` on every event.
     pub last_self_copy: Arc<Mutex<Option<String>>>,
+    /// Channel to the clipboard-writer thread; used by the `copy_item` command to place an
+    /// item's bytes back on the X11 CLIPBOARD selection.
+    pub writer: std::sync::mpsc::Sender<crate::clipboard_writer::WriteRequest>,
 }
