@@ -43,6 +43,7 @@ import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
 import { buildDateNav } from "./lib/dateNav";
 import { DateRail } from "./components/DateRail";
+import { DateNavMenu } from "./components/DateNavMenu";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon } from "./components/Icon";
@@ -703,12 +704,16 @@ export default function App() {
               className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
             />
           </div>
+          <DateNavMenu
+            entries={dateNav}
+            topRowIndex={topRowIndex}
+            onJump={scrollToHeaderIndex}
+          />
           <DateFilter
             active={dateRange}
             onApply={applyDateRange}
             onClear={() => setDateRange(null)}
             presentDays={presentDays}
-            jumpEntries={dateNav}
             onNavigate={(iso) => {
               const idx = isoDayToHeaderIndex.get(iso);
               if (idx != null) scrollToHeaderIndex(idx);

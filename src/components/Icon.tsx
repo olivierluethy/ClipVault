@@ -118,6 +118,19 @@ export const PlusIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A vertical axis with dated nodes — echoes the date rail's spine so the narrow
+// jump control reads as the same feature, and stays distinct from the filter's
+// calendar grid.
+export const TimelineIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 4v16" />
+    <circle cx="6" cy="7" r="1.4" />
+    <circle cx="6" cy="12" r="1.4" />
+    <circle cx="6" cy="17" r="1.4" />
+    <path d="M10 7h9M10 12h7M10 17h8" />
+  </Svg>
+);
+
 export const XIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M6 6l12 12M18 6 6 18" />
