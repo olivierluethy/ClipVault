@@ -36,6 +36,20 @@ pub fn list_by_type(
 }
 
 #[tauri::command]
+pub fn list_items_range(
+    state: State<AppState>,
+    from_ms: i64,
+    to_ms: i64,
+    limit: i64,
+    before_created_at: Option<i64>,
+    before_id: Option<String>,
+) -> Result<Vec<ItemDto>, String> {
+    state.storage
+        .list_items_in_range(from_ms, to_ms, limit, before_created_at, before_id.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn folder_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
     state.storage.folder_counts().map_err(|e| e.to_string())
 }

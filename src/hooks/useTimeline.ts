@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Item, listItems, listPinned, listByType, listItemsInFolder, onItemAdded } from "../api";
+import {
+  Item,
+  listItems,
+  listPinned,
+  listByType,
+  listItemsInFolder,
+  listItemsRange,
+  onItemAdded,
+} from "../api";
 import { Row, toRows } from "../lib/dates";
 
 const USER_FOLDER_PREFIX = "user:";
+
+export type DateRange = { fromMs: number; toMs: number; label: string };
 
 function sortDesc(items: Item[]): Item[] {
   return [...items].sort((a, b) => {
@@ -11,12 +21,20 @@ function sortDesc(items: Item[]): Item[] {
   });
 }
 
-export function useTimeline(folder: string) {
+export function useTimeline(folder: string, range: DateRange | null) {
   const [pinned, setPinned] = useState<Item[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const done = useRef(false);
 
   const reload = useCallback(async () => {
+    // A date range overrides the folder view: show everything captured in that window.
+    if (range) {
+      setPinned([]);
+      const head = await listItemsRange(range.fromMs, range.toMs, 100);
+      setItems(head);
+      done.current = head.length < 100;
+      return;
+    }
     if (folder.startsWith(USER_FOLDER_PREFIX)) {
       const folderId = folder.slice(USER_FOLDER_PREFIX.length);
       setPinned([]);
@@ -39,10 +57,17 @@ export function useTimeline(folder: string) {
       setItems(head);
       done.current = head.length < 100;
     }
-  }, [folder]);
+  }, [folder, range]);
 
   const loadMore = useCallback(async () => {
     if (done.current || items.length === 0) return;
+    if (range) {
+      const last = items[items.length - 1];
+      const next = await listItemsRange(range.fromMs, range.toMs, 100, last.created_at, last.id);
+      if (next.length < 100) done.current = true;
+      setItems((cur) => [...cur, ...next]);
+      return;
+    }
     if (folder.startsWith(USER_FOLDER_PREFIX)) {
       const folderId = folder.slice(USER_FOLDER_PREFIX.length);
       const last = items[items.length - 1];
@@ -63,7 +88,7 @@ export function useTimeline(folder: string) {
       if (next.length < 100) done.current = true;
       setItems((cur) => [...cur, ...next]);
     }
-  }, [items, folder]);
+  }, [items, folder, range]);
 
   useEffect(() => {
     reload();

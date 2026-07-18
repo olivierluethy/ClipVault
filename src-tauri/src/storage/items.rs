@@ -141,6 +141,38 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Items whose `created_at` falls in the half-open range `[from_ms, to_ms)`, newest
+    /// first, cursor-paginated. Includes pinned items (a date view should show
+    /// everything captured that day). Powers the date filter.
+    pub fn list_items_in_range(
+        &self,
+        from_ms: i64,
+        to_ms: i64,
+        limit: i64,
+        before_created_at: Option<i64>,
+        before_id: Option<&str>,
+    ) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL
+               AND created_at >= ?4 AND created_at < ?5
+               AND (?2 IS NULL
+                    OR created_at < ?2
+                    OR (created_at = ?2 AND id < ?3))
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows: Vec<ItemDto> = stmt
+            .query_map(
+                rusqlite::params![limit, before_created_at, before_id, from_ms, to_ms],
+                map_item,
+            )?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     pub fn list_by_type(
         &self,
         type_str: &str,

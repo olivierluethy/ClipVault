@@ -37,13 +37,15 @@ import { BulkActionBar } from "./components/BulkActionBar";
 import { Settings } from "./components/Settings";
 import { QrModal } from "./components/QrModal";
 import { TextModal } from "./components/TextModal";
-import { useTimeline } from "./hooks/useTimeline";
+import { useTimeline, DateRange } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
 import { toRows } from "./lib/dates";
+import { DateFilter } from "./components/DateFilter";
 
 export default function App() {
   const [folder, setFolder] = useState("all");
-  const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder);
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder, dateRange);
   const [privacy, setPriv] = useState(false);
   const [quickMsg, setQuickMsg] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -159,7 +161,16 @@ export default function App() {
 
   const handleSelectFolder = useCallback((f: string) => {
     clearSearch();
+    setDateRange(null);
     setFolder(f);
+  }, [clearSearch]);
+
+  // Applying a date range replaces the folder/search view with an all-types view of
+  // that window (kept mutually exclusive to stay easy to reason about).
+  const applyDateRange = useCallback((r: DateRange) => {
+    clearSearch();
+    setFolder("all");
+    setDateRange(r);
   }, [clearSearch]);
 
   const rows = isSearching ? toRows(searchResults) : folderRows;
@@ -431,6 +442,11 @@ export default function App() {
             placeholder="Search…"
             className="flex-1 min-w-0 px-3 py-1 rounded border border-border bg-bg-raised text-fg text-sm placeholder:text-fg-muted focus:outline-none focus:border-accent"
           />
+          <DateFilter
+            active={dateRange}
+            onApply={applyDateRange}
+            onClear={() => setDateRange(null)}
+          />
           <button
             onClick={doQuickAdd}
             title="Save the current clipboard now (works even in Privacy mode)"
@@ -462,6 +478,15 @@ export default function App() {
               {searchResults.length} result{searchResults.length === 1 ? "" : "s"} for &lsquo;{debouncedQuery.trim()}&rsquo;
             </span>
             <button onClick={clearSearch} className="text-accent hover:underline">
+              Clear
+            </button>
+          </div>
+        )}
+
+        {!isSearching && dateRange && (
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0 text-sm text-fg-muted">
+            <span>Showing items from <span className="text-fg">{dateRange.label}</span></span>
+            <button onClick={() => setDateRange(null)} className="text-accent hover:underline">
               Clear
             </button>
           </div>
@@ -525,7 +550,11 @@ export default function App() {
         <div ref={parentRef} className="flex-1 overflow-auto p-4 min-h-0">
           {isEmpty && (
             <p className="text-fg-muted">
-              {isSearching ? "No results." : "Nothing captured yet — copy something."}
+              {isSearching
+                ? "No results."
+                : dateRange
+                ? "No items in this date range."
+                : "Nothing captured yet — copy something."}
             </p>
           )}
           <div style={{ height: virt.getTotalSize(), position: "relative" }}>

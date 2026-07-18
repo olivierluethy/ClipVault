@@ -29,6 +29,20 @@ export const listByType = (typeStr: string, limit = 100, beforeCreatedAt?: numbe
     beforeCreatedAt: beforeCreatedAt ?? null,
     beforeId: beforeId ?? null,
   });
+export const listItemsRange = (
+  fromMs: number,
+  toMs: number,
+  limit = 100,
+  beforeCreatedAt?: number,
+  beforeId?: string
+) =>
+  invoke<Item[]>("list_items_range", {
+    fromMs,
+    toMs,
+    limit,
+    beforeCreatedAt: beforeCreatedAt ?? null,
+    beforeId: beforeId ?? null,
+  });
 export const folderCounts = () => invoke<[string, number][]>("folder_counts");
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
 export const copyItemClean = (id: string) => invoke<void>("copy_item_clean", { id });

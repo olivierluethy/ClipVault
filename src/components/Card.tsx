@@ -200,10 +200,11 @@ export function Card(props: {
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const linkMeta = item.item_type === "link" ? parseLinkMetadata(item.metadata) : null;
-  // Long text/number/link content that gets truncated in the row → offer "show more".
-  const isLongText =
+  // Text/number/link content is shown truncated in the row — always offer a full-value
+  // view (the row can't show large values in their entirety).
+  const canViewFull =
     (item.item_type === "text" || item.item_type === "number" || item.item_type === "link") &&
-    ((item.content?.length ?? 0) > 80 || (item.content?.includes("\n") ?? false));
+    !!item.content;
 
   useEffect(() => {
     if (editing) {
@@ -389,17 +390,17 @@ export function Card(props: {
               🌐
             </button>
           )}
-          {isLongText && (
+          {canViewFull && (
             <button
-              title="Show more"
-              aria-label="Show more"
+              title="View full value"
+              aria-label="View full value"
               onClick={(e) => {
                 e.stopPropagation();
                 props.onExpandText();
               }}
               className="rounded px-1.5 py-1 text-sm text-fg-muted hover:bg-bg-raised hover:text-accent"
             >
-              ⤢
+              👁
             </button>
           )}
           {contentBased && (
