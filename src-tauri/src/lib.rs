@@ -19,6 +19,10 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
@@ -34,6 +38,15 @@ pub fn run() {
             let privacy = Arc::new(AtomicBool::new(privacy_init));
 
             app.manage(crate::state::AppState { storage: storage.clone(), privacy: privacy.clone() });
+
+            // Enable autostart on first run only; respects a user's later choice to disable it.
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                if storage.get_setting("autostart_initialized")?.is_none() {
+                    let _ = app.autolaunch().enable();
+                    storage.set_setting("autostart_initialized", "1")?;
+                }
+            }
 
             // Spawn the clipboard watcher thread.
             let handle = app.handle().clone();
