@@ -15,6 +15,7 @@ locally in SQLite, no cloud, no telemetry.
 
 - [What it does](#what-it-does)
 - [Quick start](#quick-start)
+- [Install (Ubuntu)](#install-ubuntu)
 - [Requirements](#requirements)
 - [How it works (architecture)](#how-it-works-architecture)
 - [Data model & storage](#data-model--storage)
@@ -83,6 +84,57 @@ npm run tauri build -- --no-bundle     # → just the binary at src-tauri/target
 ```
 
 The release binary is what an installed app or autostart entry runs.
+
+---
+
+## Install (Ubuntu)
+
+ClipVault ships as a `.deb`. Build it once, then install it. The installed app is
+**self-contained** — the UI is embedded, so there's no dev server and no "white screen" —
+it registers its launcher icon in the dock/app grid, and can autostart on login.
+
+### 1. Build the package
+
+```bash
+npm install
+npm run tauri build      # → clipvault_<version>_amd64.deb in src-tauri/target/release/bundle/deb/
+```
+
+### 2. Install the `.deb`
+
+Use `apt` so system dependencies are resolved automatically:
+
+```bash
+sudo apt install ./src-tauri/target/release/bundle/deb/clipvault_*_amd64.deb
+```
+
+Or with `dpkg` (then pull in any missing dependencies):
+
+```bash
+sudo dpkg -i src-tauri/target/release/bundle/deb/clipvault_*_amd64.deb
+sudo apt-get install -f      # only if dpkg reports missing dependencies
+```
+
+### 3. Launch it
+
+- **Refresh the dock icon:** on **X11**, press `Alt+F2`, type `r`, Enter (reloads GNOME
+  Shell); on **Wayland**, log out and back in. The package's post-install script already
+  rebuilds the icon and desktop-entry caches.
+- **Run it:** open *Activities* and search “ClipVault”, or run `clipvault` from a terminal.
+
+### Update / uninstall
+
+```bash
+# Update: rebuild, then reinstall over the top
+sudo apt install ./src-tauri/target/release/bundle/deb/clipvault_*_amd64.deb
+
+# Uninstall
+sudo apt remove clipvault
+```
+
+> **Don't run the installed app and `npm run tauri dev` at the same time.** ClipVault is
+> single-instance (identifier `net.gmx.clipvault`), so whichever starts second just hands
+> off to the first. Use the installed app for daily use; quit it before developing.
 
 ---
 
