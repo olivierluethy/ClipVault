@@ -93,6 +93,12 @@ impl Storage {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)",
             params![id, item.item_type.as_str(), item.content, item.file_path, item.preview_path, item.content_hash, now],
         )?;
+        if let Some(content) = &item.content {
+            conn.execute(
+                "INSERT INTO items_fts (item_id, content) VALUES (?1, ?2)",
+                params![id, content],
+            )?;
+        }
         Ok(InsertOutcome::Inserted(id))
     }
 
@@ -199,6 +205,13 @@ impl Storage {
             "UPDATE items SET content = ?1, updated_at = ?2 WHERE id = ?3",
             params![content, now, id],
         )?;
+        // items_fts is a plain (non-external-content) FTS5 table with no unique
+        // constraint to UPSERT against, so re-sync via delete+insert.
+        conn.execute("DELETE FROM items_fts WHERE item_id = ?1", params![id])?;
+        conn.execute(
+            "INSERT INTO items_fts (item_id, content) VALUES (?1, ?2)",
+            params![id, content],
+        )?;
         Ok(())
     }
 
@@ -233,7 +246,42 @@ impl Storage {
             "DELETE FROM item_folders WHERE item_id NOT IN (SELECT id FROM items)",
             [],
         )?;
+        conn.execute(
+            "DELETE FROM items_fts WHERE item_id NOT IN (SELECT id FROM items)",
+            [],
+        )?;
         Ok(files)
+    }
+
+    /// Full-text search over item content via FTS5. Matches the whole query as a
+    /// single phrase with trailing-token prefix matching (e.g. "hel" matches "hello").
+    /// The query is escaped into a quoted phrase so arbitrary user input can never be
+    /// interpreted as FTS5 query syntax.
+    #[allow(dead_code)]
+    pub fn search(&self, query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Ok(vec![]);
+        }
+        let fts = format!("\"{}\"*", query.replace('"', "\"\""));
+        let conn = self.conn.lock().unwrap();
+        let cols: String = ITEM_COLS
+            .split(", ")
+            .map(|c| format!("i.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT {cols} FROM items i
+             JOIN items_fts f ON f.item_id = i.id
+             WHERE items_fts MATCH ?1 AND i.deleted_at IS NULL
+             ORDER BY i.created_at DESC
+             LIMIT ?2"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows: Vec<ItemDto> = stmt
+            .query_map(params![fts, limit], map_item)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
     }
 }
 
@@ -411,5 +459,57 @@ mod tests {
         let counts: std::collections::HashMap<String,i64> = s.folder_counts().unwrap().into_iter().collect();
         assert_eq!(counts.get("text"), Some(&1));
         assert_eq!(counts.get("color"), Some(&1));
+    }
+
+    #[test]
+    fn search_finds_matching_items_by_content() {
+        let (_d, s) = storage();
+        let mk = |c: &str, h: &str, t: i64| s.insert_or_bump(
+            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, preview_path:None, content_hash:h.into()}, t).unwrap();
+        mk("hello world", "h1", 100);
+        mk("the quick brown fox", "h2", 200);
+        mk("a link https://rust-lang.org", "h3", 300);
+
+        let r = s.search("quick", 10).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].content.as_deref(), Some("the quick brown fox"));
+
+        let r = s.search("hello", 10).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].content.as_deref(), Some("hello world"));
+
+        // prefix match on last token
+        let r = s.search("http", 10).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].content.as_deref(), Some("a link https://rust-lang.org"));
+    }
+
+    #[test]
+    fn search_empty_query_returns_empty() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        assert!(s.search("", 10).unwrap().is_empty());
+        assert!(s.search("   ", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_excludes_soft_deleted_items() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello world".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        let id = s.list_items(10, None, None).unwrap()[0].id.clone();
+        s.soft_delete(&id, 200).unwrap();
+        assert!(s.search("hello", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_reflects_updated_content() {
+        let (_d, s) = storage();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("old value".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        let id = s.list_items(10, None, None).unwrap()[0].id.clone();
+        s.update_content(&id, "brand new phrase", 200).unwrap();
+        assert!(s.search("old", 10).unwrap().is_empty());
+        let r = s.search("brand", 10).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].content.as_deref(), Some("brand new phrase"));
     }
 }

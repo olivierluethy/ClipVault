@@ -121,6 +121,16 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 4", [])?;
         version = 4;
     }
+    if version < 5 {
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(item_id UNINDEXED, content);
+             INSERT INTO items_fts(item_id, content)
+               SELECT id, content FROM items
+               WHERE content IS NOT NULL AND id NOT IN (SELECT item_id FROM items_fts);",
+        )?;
+        conn.execute("PRAGMA user_version = 5", [])?;
+        version = 5;
+    }
     let _ = version;
     Ok(())
 }
@@ -166,7 +176,7 @@ mod tests {
         {
             let conn = s.conn.lock().unwrap();
             let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(v, 4);
+            assert_eq!(v, 5);
             let cols: Vec<String> = conn
                 .prepare("SELECT name FROM pragma_table_info('items')").unwrap()
                 .query_map([], |r| r.get::<_, String>(0)).unwrap()
@@ -175,12 +185,12 @@ mod tests {
                 assert!(cols.contains(&c.to_string()), "missing column {c}");
             }
         }
-        // Reopen: must not error (idempotent) and stay at v4.
+        // Reopen: must not error (idempotent) and stay at v5.
         drop(s);
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()
             .query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 4);
+        assert_eq!(v, 5);
     }
 
     #[test]
@@ -217,6 +227,32 @@ mod tests {
             assert_eq!(ty("d"), "color");
             assert_eq!(ty("e"), "number");
             assert_eq!(ty("f"), "text");
+        }
+    }
+
+    #[test]
+    fn migration_v5_backfills_fts_from_existing_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("clipvault.db");
+        let s = Storage::open(&db).unwrap();
+        {
+            let conn = s.conn.lock().unwrap();
+            // Simulate a row that predates the FTS table (inserted directly, bypassing
+            // the items.rs insert path that keeps items_fts in sync).
+            conn.execute(
+                "INSERT INTO items (id,type,content,content_hash,copy_count,created_at,updated_at) \
+                 VALUES ('pre','text','backfill me','pre',1,1,1)",
+                [],
+            ).unwrap();
+            // Pretend this DB predates v5 (no items_fts row for 'pre' yet), then rerun the migration.
+            conn.execute("PRAGMA user_version = 4", []).unwrap();
+            migrate(&conn).unwrap();
+            let found: String = conn
+                .query_row(
+                    "SELECT content FROM items_fts WHERE item_id = 'pre'",
+                    [], |r| r.get(0),
+                ).unwrap();
+            assert_eq!(found, "backfill me");
         }
     }
 }
