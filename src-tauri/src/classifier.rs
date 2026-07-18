@@ -97,7 +97,10 @@ mod tests {
     #[test]
     fn classifies_links() {
         assert_eq!(classify_text("https://example.com/x"), ItemType::Link);
+        assert_eq!(classify_text("https://www.bild.de"), ItemType::Link);
+        assert_eq!(classify_text("http://example.com"), ItemType::Link);
         assert_eq!(classify_text("www.example.com"), ItemType::Link);
+        assert_eq!(classify_text("  https://trimmed.example.com/path?q=1  "), ItemType::Link);
         assert_eq!(classify_text("not a link just words"), ItemType::Text);
     }
 
