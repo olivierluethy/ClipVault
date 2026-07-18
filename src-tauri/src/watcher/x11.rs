@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use anyhow::{anyhow, Result};
 use x11_clipboard::Clipboard;
+use x11_clipboard::error::Error as ClipError;
 use x11rb::protocol::xproto::Atom;
 use super::{ClipEvent, ClipboardBackend};
 
@@ -64,11 +65,19 @@ impl ClipboardBackend for X11Backend {
                     consecutive_failures = 0;
                     bytes
                 }
+                // A non-compliant clipboard owner may reply with an unexpected type,
+                // or fail to hand over ownership. That's a per-owner semantic error,
+                // not a dead connection — skip this change WITHOUT counting toward the
+                // give-up threshold, so one misbehaving app can't stop the watcher.
+                Err(ClipError::UnexpectedType(_)) | Err(ClipError::Owner) => {
+                    consecutive_failures = 0;
+                    continue;
+                }
                 Err(_) => {
-                    // If the X connection has died persistently (X server restart /
-                    // session logout), load_wait fails immediately every call, which
-                    // would otherwise busy-loop at 100% CPU. Back off and give up
-                    // after repeated consecutive failures instead of spinning.
+                    // Genuine connection-level errors (X server restart / session
+                    // logout) make load_wait fail immediately every call, which would
+                    // otherwise busy-loop at 100% CPU. Back off and give up after
+                    // repeated consecutive failures instead of spinning.
                     consecutive_failures += 1;
                     if consecutive_failures >= 10 {
                         eprintln!(
@@ -86,15 +95,30 @@ impl ClipboardBackend for X11Backend {
             }
 
             if !text.is_empty() {
+                // Phase-0 accepted trade-off: text wins when an owner offers BOTH
+                // text and an image (the design's stated image>text priority is
+                // deferred; enumerating TARGETS is not viable with this crate — see
+                // the module's Phase-1 follow-ups).
                 let _ = tx.send(ClipEvent { mime: "UTF8_STRING".to_string(), bytes: text });
                 continue;
             }
 
             // Non-text change: probe image targets for the CURRENT value. `load`
-            // reads immediately (no wait) and returns the raw bytes unmodified,
-            // preserving GIF/PNG encoding. First non-empty target wins.
+            // reads immediately and returns the raw bytes unmodified, preserving
+            // GIF/PNG encoding. First non-empty target wins.
+            //
+            // Phase-0 limitations (documented; revisit in Phase 1 with raw x11rb
+            // XFIXES handling):
+            //   * `load` polls internally (crate `process_event`, use_xfixes=false)
+            //     up to the timeout — kept short so the probe returns fast.
+            //   * If another clipboard change lands during the probe, `load` can
+            //     consume+drop its XFIXES notification, so the watcher resyncs one
+            //     change late under rapid back-to-back copies. Narrow race (only the
+            //     non-text path, only within this sub-second window).
+            //   * Only gif/png/jpeg are recognized; text/uri-list and exotic image
+            //     formats are out of Phase-0 scope.
             for (mime, atom) in &image_targets {
-                match self.clipboard.load(selection, *atom, property, Duration::from_millis(500)) {
+                match self.clipboard.load(selection, *atom, property, Duration::from_millis(150)) {
                     Ok(bytes) if !bytes.is_empty() => {
                         let _ = tx.send(ClipEvent { mime: mime.to_string(), bytes });
                         break;
