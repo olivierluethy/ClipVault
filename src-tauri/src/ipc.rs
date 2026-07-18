@@ -60,6 +60,36 @@ pub fn update_content(state: State<AppState>, id: String, content: String) -> Re
     state.storage.update_content(&id, &content, now_ms()).map_err(|e| e.to_string())
 }
 
+/// Send `req` to the clipboard writer and set the self-copy marker to the hash of the
+/// *exact* bytes being written (not e.g. the stored item's content hash), so the watcher
+/// thread recognizes the echo it reads back and suppresses re-capturing it.
+fn write_and_mark(state: &State<AppState>, req: WriteRequest) -> Result<(), String> {
+    let hash = crate::hashing::sha256_hex(&req.bytes);
+    *state.last_self_copy.lock().unwrap() = Some(hash);
+    state.writer.send(req).map_err(|e| e.to_string())
+}
+
+/// Build the `WriteRequest` for an item's stored bytes, applying `transform` to
+/// content-based (non-file) items only; image/gif items are written verbatim from disk.
+fn build_write_request(
+    ty: &str,
+    content: Option<String>,
+    file_path: Option<String>,
+    transform: impl FnOnce(String) -> String,
+) -> Result<WriteRequest, String> {
+    Ok(match file_path {
+        None => WriteRequest {
+            mime: "UTF8_STRING".into(),
+            bytes: transform(content.unwrap_or_default()).into_bytes(),
+        },
+        Some(path) => {
+            let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+            let mime = if ty == "gif" { "image/gif" } else { "image/png" };
+            WriteRequest { mime: mime.into(), bytes }
+        }
+    })
+}
+
 #[tauri::command]
 pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
     let (ty, content, file_path, hash) = state.storage.get_item(&id)
@@ -68,17 +98,34 @@ pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
     *state.last_self_copy.lock().unwrap() = Some(hash);
     // Content-based items (text/link/number/color) have no file and are written as
     // UTF8_STRING; only image/gif are written from their file bytes.
-    let req = match file_path {
-        None => WriteRequest {
-            mime: "UTF8_STRING".into(),
-            bytes: content.unwrap_or_default().into_bytes(),
-        },
-        Some(path) => {
-            let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-            let mime = if ty == "gif" { "image/gif" } else { "image/png" };
-            WriteRequest { mime: mime.into(), bytes }
-        }
-    };
+    let req = build_write_request(&ty, content, file_path, |s| s)?;
+    state.writer.send(req).map_err(|e| e.to_string())
+}
+
+/// Like `copy_item`, but for content-based items (text/link/number/color) applies
+/// `cleantext::clean_text` before writing: whitespace normalization plus stripping
+/// tracking query params from URLs. Image/gif items are copied unmodified.
+///
+/// The self-copy marker is set to the hash of the *cleaned* bytes actually written
+/// (not the stored item's content_hash), since those are what the watcher reads back.
+#[tauri::command]
+pub fn copy_item_clean(state: State<AppState>, id: String) -> Result<(), String> {
+    let (ty, content, file_path, _hash) = state.storage.get_item(&id)
+        .map_err(|e| e.to_string())?.ok_or("item not found")?;
+    let req = build_write_request(&ty, content, file_path, |s| crate::cleantext::clean_text(&s))?;
+    write_and_mark(&state, req)
+}
+
+/// Like `copy_item`, but explicitly copies the item as plain UTF8_STRING text (for
+/// "paste as plain text"). All stored content is already plain text, so for
+/// content-based items this writes the same bytes as `copy_item`; image/gif items are
+/// copied unmodified, same as `copy_item`.
+#[tauri::command]
+pub fn copy_item_plain(state: State<AppState>, id: String) -> Result<(), String> {
+    let (ty, content, file_path, hash) = state.storage.get_item(&id)
+        .map_err(|e| e.to_string())?.ok_or("item not found")?;
+    *state.last_self_copy.lock().unwrap() = Some(hash);
+    let req = build_write_request(&ty, content, file_path, |s| s)?;
     state.writer.send(req).map_err(|e| e.to_string())
 }
 

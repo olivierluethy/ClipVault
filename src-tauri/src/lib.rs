@@ -1,4 +1,5 @@
 mod hashing;
+mod cleantext;
 mod storage;
 mod classifier;
 mod watcher;
@@ -208,6 +209,8 @@ pub fn run() {
             crate::ipc::restore_item,
             crate::ipc::update_content,
             crate::ipc::copy_item,
+            crate::ipc::copy_item_clean,
+            crate::ipc::copy_item_plain,
             crate::ipc::create_folder,
             crate::ipc::rename_folder,
             crate::ipc::delete_folder,
