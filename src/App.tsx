@@ -20,6 +20,7 @@ import {
   assignItem,
   unassignItem,
   foldersForItem,
+  search,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
@@ -28,11 +29,16 @@ import { Sidebar } from "./components/Sidebar";
 import { BulkActionBar } from "./components/BulkActionBar";
 import { useTimeline } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
+import { toRows } from "./lib/dates";
 
 export default function App() {
   const [folder, setFolder] = useState("all");
-  const { pinned, rows, flatItems, reload, loadMore } = useTimeline(folder);
+  const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder);
   const [privacy, setPriv] = useState(false);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Item[]>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState<Item | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
@@ -76,6 +82,62 @@ export default function App() {
     };
   }, [reloadFolders]);
 
+  // Debounce the raw query into debouncedQuery so we don't hit the DB on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const isSearching = debouncedQuery.trim().length > 0;
+
+  const runSearch = useCallback(async () => {
+    const q = debouncedQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchResults(await search(q));
+  }, [debouncedQuery]);
+
+  useEffect(() => {
+    runSearch();
+  }, [runSearch]);
+
+  // Keep search results fresh while a query is active (e.g. new items captured).
+  useEffect(() => {
+    if (!isSearching) return;
+    const un = onItemAdded(runSearch);
+    return () => {
+      un.then((f) => f());
+    };
+  }, [isSearching, runSearch]);
+
+  // Global Ctrl/Cmd+F focuses the search box.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setQuery("");
+    setDebouncedQuery("");
+    setSearchResults([]);
+  }, []);
+
+  const handleSelectFolder = useCallback((f: string) => {
+    clearSearch();
+    setFolder(f);
+  }, [clearSearch]);
+
+  const rows = isSearching ? toRows(searchResults) : folderRows;
+  const flatItems = isSearching ? searchResults : folderFlatItems;
+
   const handleCreateFolder = useCallback(
     async (name: string) => {
       await createFolder(name);
@@ -115,16 +177,18 @@ export default function App() {
       setPendingDeleteIds([it.id]);
       reload();
       reloadCounts();
+      if (isSearching) runSearch();
     },
-    [reload, reloadCounts]
+    [reload, reloadCounts, isSearching, runSearch]
   );
 
   const pin = useCallback(
     async (it: Item) => {
       await setPinned(it.id, !it.pinned);
       reload();
+      if (isSearching) runSearch();
     },
-    [reload]
+    [reload, isSearching, runSearch]
   );
 
   const edit = useCallback((it: Item) => {
@@ -136,9 +200,10 @@ export default function App() {
       updateContent(id, content).then(() => {
         setEditingId(null);
         reload();
+        if (isSearching) runSearch();
       });
     },
-    [reload]
+    [reload, isSearching, runSearch]
   );
 
   const loadMemberships = useCallback((itemId: string) => foldersForItem(itemId), []);
@@ -278,31 +343,56 @@ export default function App() {
     setPriv(next);
   };
 
-  const isEmpty = rows.length === 0 && pinned.length === 0;
+  const isEmpty = isSearching ? rows.length === 0 : rows.length === 0 && pinned.length === 0;
 
   return (
     <div className="h-screen flex">
       <Sidebar
         counts={counts}
         selected={folder}
-        onSelect={setFolder}
+        onSelect={handleSelectFolder}
         folders={folders}
         onCreateFolder={handleCreateFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
       />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <header className="flex items-center justify-between p-4 border-b border-border shrink-0">
-          <h1 className="text-lg font-semibold">ClipVault</h1>
+        <header className="flex items-center gap-4 p-4 border-b border-border shrink-0">
+          <h1 className="text-lg font-semibold shrink-0">ClipVault</h1>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.currentTarget.blur();
+                clearSearch();
+              }
+            }}
+            placeholder="Search…"
+            className="flex-1 min-w-0 px-3 py-1 rounded border border-border bg-bg-raised text-fg text-sm placeholder:text-fg-muted focus:outline-none focus:border-accent"
+          />
           <button
             onClick={toggle}
-            className={`px-3 py-1 rounded border border-border text-sm ${
+            className={`px-3 py-1 rounded border border-border text-sm shrink-0 ${
               privacy ? "bg-accent-dim text-fg" : "text-fg-muted"
             }`}
           >
             {privacy ? "Privacy: ON" : "Privacy: OFF"}
           </button>
         </header>
+
+        {isSearching && (
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0 text-sm text-fg-muted">
+            <span>
+              {searchResults.length} result{searchResults.length === 1 ? "" : "s"} for &lsquo;{debouncedQuery.trim()}&rsquo;
+            </span>
+            <button onClick={clearSearch} className="text-accent hover:underline">
+              Clear
+            </button>
+          </div>
+        )}
 
         {selectedIds.size > 0 && (
           <BulkActionBar
@@ -314,7 +404,7 @@ export default function App() {
           />
         )}
 
-        {pinned.length > 0 && (
+        {!isSearching && pinned.length > 0 && (
           <section className="p-4 border-b border-border space-y-2 shrink-0">
             <div className="text-xs uppercase text-fg-muted">Pinned</div>
             {pinned.map((it, i) => (
@@ -349,7 +439,11 @@ export default function App() {
         )}
 
         <div ref={parentRef} className="flex-1 overflow-auto p-4 min-h-0">
-          {isEmpty && <p className="text-fg-muted">Nothing captured yet — copy something.</p>}
+          {isEmpty && (
+            <p className="text-fg-muted">
+              {isSearching ? "No results." : "Nothing captured yet — copy something."}
+            </p>
+          )}
           <div style={{ height: virt.getTotalSize(), position: "relative" }}>
             {virt.getVirtualItems().map((v) => {
               const row = rows[v.index];

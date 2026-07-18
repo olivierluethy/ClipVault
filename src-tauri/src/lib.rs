@@ -186,6 +186,7 @@ pub fn run() {
             crate::ipc::unassign_item,
             crate::ipc::folders_for_item,
             crate::ipc::list_items_in_folder,
+            crate::ipc::search,
             crate::ipc::get_privacy,
             crate::ipc::set_privacy,
         ])

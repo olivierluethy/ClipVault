@@ -129,6 +129,11 @@ pub fn list_items_in_folder(
 }
 
 #[tauri::command]
+pub fn search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<ItemDto>, String> {
+    state.storage.search(&query, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_privacy(state: State<AppState>) -> bool {
     state.privacy.load(Ordering::Relaxed)
 }

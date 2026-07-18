@@ -257,7 +257,6 @@ impl Storage {
     /// single phrase with trailing-token prefix matching (e.g. "hel" matches "hello").
     /// The query is escaped into a quoted phrase so arbitrary user input can never be
     /// interpreted as FTS5 query syntax.
-    #[allow(dead_code)]
     pub fn search(&self, query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
         let query = query.trim();
         if query.is_empty() {

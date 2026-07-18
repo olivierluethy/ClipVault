@@ -63,3 +63,4 @@ export const listItemsInFolder = (
     beforeCreatedAt: beforeCreatedAt ?? null,
     beforeId: beforeId ?? null,
   });
+export const search = (query: string, limit = 200) => invoke<Item[]>("search", { query, limit });
