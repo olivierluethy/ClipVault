@@ -38,10 +38,13 @@ function Row(props: {
   onSelect: () => void;
   children: React.ReactNode;
   count?: number;
+  /** Accessible label used for the icon-rail tooltip (hover). */
+  title?: string;
   trailing?: React.ReactNode;
   dropProps?: React.HTMLAttributes<HTMLDivElement>;
   dropActive?: boolean;
 }) {
+  const hasCount = props.count !== undefined;
   return (
     <div
       {...props.dropProps}
@@ -57,14 +60,21 @@ function Row(props: {
       {props.selected && (
         <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent" />
       )}
+      {/* Icon-rail count badge — replaces the inline count when labels are hidden. */}
+      {hasCount && props.count! > 0 && (
+        <span className="sb-rail-only pointer-events-none absolute right-1 top-0.5 rounded-full bg-bg-hover px-1 font-mono text-[9px] leading-[14px] tnum text-fg-muted">
+          {props.count! > 99 ? "99+" : props.count}
+        </span>
+      )}
       <button
         onClick={props.onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5 text-left"
+        title={props.title}
+        className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5 text-left md:justify-center lg:justify-start"
       >
         {props.children}
-        {props.count !== undefined && (
+        {hasCount && (
           <span
-            className={`ml-auto font-mono text-[11px] tnum ${
+            className={`sb-full-only ml-auto font-mono text-[11px] tnum ${
               props.selected ? "text-fg-muted" : "text-fg-faint"
             }`}
           >
@@ -131,10 +141,11 @@ function UserFolderRow({
       selected={isSelected}
       onSelect={onSelect}
       count={folder.item_count}
+      title={folder.name}
       dropProps={dropProps}
       dropActive={dropActive}
       trailing={
-        <div className="flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="sb-full-only flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             onClick={() => setEditing(true)}
             title="Rename folder"
@@ -153,7 +164,7 @@ function UserFolderRow({
       }
     >
       <FolderIcon className="h-4 w-4 shrink-0" />
-      <span className="truncate">{folder.name}</span>
+      <span className="truncate sb-full-only">{folder.name}</span>
     </Row>
   );
 }
@@ -168,6 +179,8 @@ export function Sidebar({
   onDeleteFolder,
   dropTargetId,
   folderDropProps,
+  open = false,
+  onClose,
 }: {
   counts: Record<string, number>;
   selected: string;
@@ -180,6 +193,9 @@ export function Sidebar({
   dropTargetId?: string | null;
   /** Factory returning drag drop-handlers for a given user folder id (Task 6). */
   folderDropProps?: (folderId: string) => React.HTMLAttributes<HTMLDivElement>;
+  /** Below `md` the sidebar is an overlay drawer; `open` controls its visibility. */
+  open?: boolean;
+  onClose?: () => void;
 }) {
   const handleCreate = () => {
     const name = window.prompt("New folder name");
@@ -194,53 +210,86 @@ export function Sidebar({
     onDeleteFolder(folder.id, deleteItems);
   };
 
-  return (
-    <nav className="flex w-[208px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-bg p-2">
-      <div className="px-2.5 pb-1.5 pt-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
-        Library
-      </div>
-      {SYSTEM.map((f) => {
-        const Icon = f.Icon;
-        return (
-          <Row
-            key={f.id}
-            selected={selected === f.id}
-            onSelect={() => onSelect(f.id)}
-            count={countFor(f.id, counts)}
-          >
-            <Icon className={`h-4 w-4 shrink-0 ${selected === f.id ? "text-accent" : ""}`} />
-            <span className="truncate">{f.label}</span>
-          </Row>
-        );
-      })}
+  // On narrow layouts the sidebar is a drawer; picking a destination closes it.
+  const pick = (id: string) => {
+    onSelect(id);
+    onClose?.();
+  };
 
-      <div className="mt-4 flex items-center justify-between px-2.5 pb-1">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Folders</span>
+  return (
+    <>
+      {/* Drawer scrim (mobile only). */}
+      <div
+        onClick={onClose}
+        aria-hidden
+        className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] md:hidden ${
+          open ? "block animate-fade-in" : "hidden"
+        }`}
+      />
+      <nav
+        aria-label="Library and folders"
+        className={`fixed inset-y-0 left-0 z-50 flex w-[208px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-bg p-2 transition-transform duration-200
+          md:relative md:z-auto md:w-14 md:translate-x-0 md:shadow-none lg:w-[208px]
+          ${open ? "translate-x-0 shadow-2xl shadow-black/60" : "-translate-x-full"}`}
+      >
+        <div className="sb-full-only px-2.5 pb-1.5 pt-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+          Library
+        </div>
+        {SYSTEM.map((f) => {
+          const Icon = f.Icon;
+          return (
+            <Row
+              key={f.id}
+              selected={selected === f.id}
+              onSelect={() => pick(f.id)}
+              count={countFor(f.id, counts)}
+              title={f.label}
+            >
+              <Icon className={`h-4 w-4 shrink-0 ${selected === f.id ? "text-accent" : ""}`} />
+              <span className="truncate sb-full-only">{f.label}</span>
+            </Row>
+          );
+        })}
+
+        {/* Rail divider between the two groups when labels are hidden. */}
+        <div className="sb-rail-only mx-2 my-2 h-px bg-border" />
+
+        <div className="mt-4 flex items-center justify-between px-2.5 pb-1 sb-full-only">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Folders</span>
+          <button
+            onClick={handleCreate}
+            title="New folder"
+            className="grid h-5 w-5 place-items-center rounded text-fg-muted hover:bg-bg-raised hover:text-fg"
+          >
+            <FolderPlusIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {/* Rail-mode new-folder affordance (the labelled header above is hidden). */}
         <button
           onClick={handleCreate}
           title="New folder"
-          className="grid h-5 w-5 place-items-center rounded text-fg-muted hover:bg-bg-raised hover:text-fg"
+          className="sb-rail-only mx-auto grid h-8 w-8 place-items-center rounded-md text-fg-muted hover:bg-bg-raised hover:text-fg"
         >
-          <FolderPlusIcon className="h-3.5 w-3.5" />
+          <FolderPlusIcon className="h-4 w-4" />
         </button>
-      </div>
 
-      {folders.length === 0 && (
-        <div className="px-2.5 py-1 text-xs text-fg-faint">Drag items here or press ＋</div>
-      )}
+        {folders.length === 0 && (
+          <div className="sb-full-only px-2.5 py-1 text-xs text-fg-faint">Drag items here or press ＋</div>
+        )}
 
-      {folders.map((f) => (
-        <UserFolderRow
-          key={f.id}
-          folder={f}
-          isSelected={selected === `${USER_FOLDER_PREFIX}${f.id}`}
-          onSelect={() => onSelect(`${USER_FOLDER_PREFIX}${f.id}`)}
-          onRename={(name) => onRenameFolder(f.id, name)}
-          onDelete={() => handleDelete(f)}
-          dropProps={folderDropProps?.(f.id)}
-          dropActive={dropTargetId === f.id}
-        />
-      ))}
-    </nav>
+        {folders.map((f) => (
+          <UserFolderRow
+            key={f.id}
+            folder={f}
+            isSelected={selected === `${USER_FOLDER_PREFIX}${f.id}`}
+            onSelect={() => pick(`${USER_FOLDER_PREFIX}${f.id}`)}
+            onRename={(name) => onRenameFolder(f.id, name)}
+            onDelete={() => handleDelete(f)}
+            dropProps={folderDropProps?.(f.id)}
+            dropActive={dropTargetId === f.id}
+          />
+        ))}
+      </nav>
+    </>
   );
 }

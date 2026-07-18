@@ -37,6 +37,67 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ─── Responsive timeline rows ────────────────────────────────────────────────
+   Each row reacts to its OWN width, not the viewport, so a card adapts the same
+   whether the sidebar/date-rail are shown or the window is dragged narrow. */
+.card {
+  container: card / inline-size;
+}
+
+/* Reserves room for the resting meta (time · ×N · pin) which cross-fades to the
+   hover action cluster. Collapses to just its buttons on tight rows. */
+.card-actions-zone {
+  width: 164px;
+}
+
+/* Tight rows (narrow window): drop the meta column and the low-priority inline
+   actions, show the action cluster permanently (tappable, not hover-only), and
+   let the action zone shrink to just its buttons. */
+@container card (max-width: 500px) {
+  .card-typecode {
+    display: none;
+  }
+  .card-actions-zone {
+    width: auto;
+  }
+  .card-meta {
+    display: none;
+  }
+  .card-actions {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .card-action-extra {
+    display: none;
+  }
+}
+
+/* Very tight rows: the Copy button keeps its icon but sheds its label so it can
+   never be clipped to "Cop". */
+@container card (max-width: 380px) {
+  .card-copy-label {
+    display: none;
+  }
+}
+
+/* ─── Responsive sidebar modes ────────────────────────────────────────────────
+   < md            drawer (JS-toggled overlay) — full labels
+   md .. lg-1      icons-only rail — labels/counts hidden, count shown as a badge
+   >= lg           full sidebar — labels + inline counts
+   These helpers keep the Sidebar JSX readable instead of stacking breakpoint
+   prefixes on every element. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .sb-full-only {
+    display: none !important;
+  }
+}
+@media (max-width: 767.98px), (min-width: 1024px) {
+  .sb-rail-only {
+    display: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

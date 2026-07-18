@@ -45,13 +45,14 @@ import { buildDateNav } from "./lib/dateNav";
 import { DateRail } from "./components/DateRail";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
-import { SearchIcon, PlusIcon, SlidersIcon } from "./components/Icon";
+import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon } from "./components/Icon";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
 
 export default function App() {
   const [folder, setFolder] = useState("all");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder, dateRange);
   const [privacy, setPriv] = useState(false);
@@ -597,14 +598,25 @@ export default function App() {
         onDeleteFolder={handleDeleteFolder}
         dropTargetId={dropTargetId}
         folderDropProps={folderDropProps}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        <header className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 shrink-0">
-          <div className="mr-1 flex items-center gap-2 shrink-0">
+        <header className="flex items-center gap-1.5 border-b border-border px-2.5 py-2.5 shrink-0 sm:gap-2.5 sm:px-3.5">
+          {/* Folders live in the sidebar; below md it collapses to this drawer toggle. */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            title="Show folders"
+            aria-label="Show folders"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border text-fg-muted hover:border-border-strong hover:text-fg md:hidden"
+          >
+            <MenuIcon className="h-4 w-4" />
+          </button>
+          <div className="flex items-center gap-2 shrink-0 sm:mr-1">
             <Logo className="h-6 w-6 text-accent" />
-            <h1 className="text-[15px] font-semibold tracking-tight">ClipVault</h1>
+            <h1 className="hidden text-[15px] font-semibold tracking-tight sm:inline">ClipVault</h1>
           </div>
-          <div className="relative flex-1 min-w-0">
+          <div className="relative min-w-0 flex-1">
             <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
             <input
               ref={searchInputRef}
@@ -626,6 +638,7 @@ export default function App() {
             onApply={applyDateRange}
             onClear={() => setDateRange(null)}
             presentDays={presentDays}
+            jumpEntries={dateNav}
             onNavigate={(iso) => {
               const idx = isoDayToHeaderIndex.get(iso);
               if (idx != null) scrollToHeaderIndex(idx);
@@ -634,24 +647,23 @@ export default function App() {
           <button
             onClick={doQuickAdd}
             title="Save the current clipboard now (works even in Privacy mode)"
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm text-fg-muted hover:border-border-strong hover:text-fg"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-sm text-fg-muted hover:border-border-strong hover:text-fg lg:px-2.5"
           >
             <PlusIcon className="h-4 w-4" />
-            <span>Add</span>
+            <span className="hidden lg:inline">Add</span>
           </button>
           <button
             onClick={toggle}
             title={privacy ? "Privacy mode on — capture paused" : "Privacy mode off — capturing"}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
+            aria-pressed={privacy}
+            className={`flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 text-sm transition-colors lg:px-2.5 ${
               privacy
                 ? "border-accent/50 bg-accent-dim text-fg"
                 : "border-border text-fg-muted hover:border-border-strong hover:text-fg"
             }`}
           >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${privacy ? "bg-accent" : "bg-fg-faint"}`}
-            />
-            Privacy
+            <ShieldIcon className={`h-4 w-4 ${privacy ? "text-accent" : ""}`} />
+            <span className="hidden lg:inline">Privacy</span>
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
@@ -880,8 +892,8 @@ export default function App() {
       />
 
       {showWelcome && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-          <div className="w-full max-w-md rounded-xl border border-border bg-bg-raised p-6 shadow-2xl space-y-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 sm:p-6">
+          <div className="my-auto w-full max-w-md space-y-3 rounded-xl border border-border bg-bg-raised p-5 shadow-2xl sm:p-6">
             <h2 className="text-lg font-semibold">Welcome to ClipVault 📋</h2>
             <p className="text-sm text-fg-muted">
               ClipVault quietly saves what you copy — text, links, colors, numbers, and

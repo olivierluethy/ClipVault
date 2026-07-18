@@ -183,14 +183,14 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 p-6 overflow-y-auto"
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:p-6"
       onClick={props.onClose}
     >
       <div
         className="w-full max-w-lg rounded-xl border border-border bg-bg-raised shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-border px-5 py-3">
+        <header className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5">
           <h2 className="text-base font-semibold">Settings</h2>
           <button
             onClick={props.onClose}

@@ -39,6 +39,7 @@ function IconButton(props: {
   active?: boolean;
   danger?: boolean;
   innerRef?: React.Ref<HTMLButtonElement>;
+  className?: string;
 }) {
   return (
     <button
@@ -50,6 +51,7 @@ function IconButton(props: {
         props.onClick(e);
       }}
       className={`grid h-7 w-7 place-items-center rounded-md transition-colors
+        ${props.className ?? ""}
         ${
           props.danger
             ? "text-fg-muted hover:bg-red-500/15 hover:text-red-300"
@@ -326,7 +328,7 @@ export function Card(props: {
       draggable
       onDragStart={props.onDragStart}
       onDragEnd={props.onDragEnd}
-      className={`group relative flex cursor-pointer items-center gap-3 rounded-lg border pl-3 pr-2.5 py-2.5 transition-colors
+      className={`card group relative flex cursor-pointer items-center gap-3 rounded-lg border pl-3 pr-2.5 py-2.5 transition-colors
         ${props.dragging ? "opacity-40" : ""}
         ${
           multiSelected
@@ -361,33 +363,35 @@ export function Card(props: {
         {multiSelected && <span className="animate-pop-check text-[9px] leading-none">✓</span>}
       </button>
 
-      {/* Type code (monospace, quiet). */}
-      <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+      {/* Type code (monospace, quiet). Dropped on tight rows to protect the preview. */}
+      <span className="card-typecode w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
         {TYPE_CODE[item.item_type]}
       </span>
 
       <Preview item={item} onZoom={props.onZoom} />
 
-      {/* Right rail: meta at rest, cross-fading to the action cluster on hover/focus. */}
-      <div className="relative h-7 w-[164px] shrink-0">
-        <div className="absolute inset-y-0 right-0 flex items-center gap-2.5 pr-1 font-mono text-[11px] text-fg-faint transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 tnum">
+      {/* Right rail: meta at rest, cross-fading to the action cluster on hover/focus.
+          On tight rows (container query) the meta drops and the actions stay
+          permanently visible so they're tappable without hover. */}
+      <div className="card-actions-zone relative h-7 shrink-0">
+        <div className="card-meta absolute inset-y-0 right-0 flex items-center gap-2.5 pr-1 font-mono text-[11px] text-fg-faint transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 tnum">
           <span title="Time captured">{timeLabel(item.created_at)}</span>
           {item.copy_count > 1 && <span title={`Copied ${item.copy_count} times`}>×{item.copy_count}</span>}
           {item.pinned && <PinIcon className="h-3.5 w-3.5 text-accent" />}
         </div>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div className="card-actions pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
           {item.item_type === "link" && (
-            <IconButton title="Open in browser" onClick={props.onOpenLink}>
+            <IconButton title="Open in browser" onClick={props.onOpenLink} className="card-action-extra">
               <ExternalLinkIcon />
             </IconButton>
           )}
           {canViewFull && (
-            <IconButton title="View full value" onClick={props.onExpandText}>
+            <IconButton title="View full value" onClick={props.onExpandText} className="card-action-extra">
               <EyeIcon />
             </IconButton>
           )}
           {contentBased && (
-            <IconButton title="Edit" onClick={props.onStartEdit}>
+            <IconButton title="Edit" onClick={props.onStartEdit} className="card-action-extra">
               <EditIcon />
             </IconButton>
           )}
@@ -433,12 +437,12 @@ export function Card(props: {
             <span className="animate-pop-check">
               <CopyIcon className="h-3.5 w-3.5" />
             </span>
-            Copied
+            <span className="card-copy-label">Copied</span>
           </>
         ) : (
           <>
             <CopyIcon className="h-3.5 w-3.5" />
-            Copy
+            <span className="card-copy-label">Copy</span>
           </>
         )}
       </button>
@@ -454,6 +458,18 @@ export function Card(props: {
         onClose={() => setFolderMenuOpen(false)}
       />
       <Popover anchorEl={moreBtnRef.current} open={moreMenuOpen} onClose={() => setMoreMenuOpen(false)} width={208}>
+        {/* Open / Edit live inline on wide rows; listed here too so they stay
+            reachable on tight rows where the inline actions collapse. */}
+        {item.item_type === "link" && (
+          <MenuItem icon={<ExternalLinkIcon className="h-4 w-4" />} onClick={() => { props.onOpenLink(); setMoreMenuOpen(false); }}>
+            Open in browser
+          </MenuItem>
+        )}
+        {contentBased && (
+          <MenuItem icon={<EditIcon className="h-4 w-4" />} onClick={() => { props.onStartEdit(); setMoreMenuOpen(false); }}>
+            Edit
+          </MenuItem>
+        )}
         {contentBased && (
           <MenuItem icon={<CleanIcon className="h-4 w-4" />} onClick={() => { props.onCleanCopy(); setMoreMenuOpen(false); }}>
             Clean copy

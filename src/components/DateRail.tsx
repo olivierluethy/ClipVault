@@ -31,7 +31,7 @@ export function DateRail(props: {
   return (
     <aside
       aria-label="Jump to date"
-      className="hidden w-[152px] shrink-0 flex-col border-l border-border bg-bg md:flex"
+      className="hidden w-[152px] shrink-0 flex-col border-l border-border bg-bg lg:flex"
     >
       {/* Pinned return-to-newest control. */}
       <button

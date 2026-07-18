@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DateRange } from "../hooks/useTimeline";
 import { itemDayCounts } from "../api";
+import { DateNavEntry } from "../lib/dateNav";
 import { Popover } from "./Popover";
 import { CalendarIcon } from "./Icon";
 
@@ -170,6 +171,9 @@ export function DateFilter(props: {
   onClear: () => void;
   presentDays?: Set<string>;
   onNavigate?: (iso: string) => void;
+  /** Ordered date groups currently loaded — powers the quick-jump list that
+   *  stands in for the date rail when it's hidden (narrow layouts). */
+  jumpEntries?: DateNavEntry[];
 }) {
   const [open, setOpen] = useState(false);
   const [days, setDays] = useState<Set<string>>(new Set());
@@ -217,18 +221,56 @@ export function DateFilter(props: {
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         title="Filter by date"
-        className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
+        className={`flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2 text-sm transition-colors lg:px-2.5 ${
           props.active
             ? "border-accent/50 bg-accent-dim text-fg"
             : "border-border text-fg-muted hover:border-border-strong hover:text-fg"
         }`}
       >
         <CalendarIcon className="h-4 w-4" />
-        <span className="max-w-[9rem] truncate">{props.active ? props.active.label : "Date"}</span>
+        <span className="hidden max-w-[9rem] truncate lg:inline">
+          {props.active ? props.active.label : "Date"}
+        </span>
       </button>
 
       <Popover anchorEl={btnRef.current} open={open} onClose={() => setOpen(false)} width={272} menu={false}>
         <div className="p-2">
+          {/* Quick-jump to a loaded day — mirrors the date rail, which is hidden on
+              narrow layouts. Redundant with the rail at ≥lg, so hidden there. */}
+          {props.jumpEntries && props.jumpEntries.length > 0 && props.onNavigate && (
+            <div className="mb-2 lg:hidden">
+              <div className="mb-1 flex items-center justify-between px-0.5">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+                  Jump to
+                </span>
+                <button
+                  onClick={() => {
+                    props.onNavigate!(props.jumpEntries![0].isoDay);
+                    setOpen(false);
+                  }}
+                  className="rounded border border-accent/40 bg-accent-dim px-1.5 py-0.5 text-[11px] font-medium text-fg hover:border-accent/70"
+                >
+                  Latest
+                </button>
+              </div>
+              <div className="max-h-32 space-y-0.5 overflow-y-auto pr-0.5">
+                {props.jumpEntries.map((e) => (
+                  <button
+                    key={e.headerIndex}
+                    onClick={() => {
+                      props.onNavigate!(e.isoDay);
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{e.compact}</span>
+                    <span className="tnum shrink-0 font-mono text-[10px] text-fg-faint">{e.count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 h-px bg-border" />
+            </div>
+          )}
           <div className="mb-2 flex flex-wrap gap-1">
             {shortcuts.map((s) => (
               <button
