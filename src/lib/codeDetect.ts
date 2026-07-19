@@ -1,36 +1,48 @@
 /**
- * Detect whether a captured text item is structured code, and — only where it can be
- * done *correctly* — expose a pretty-printer for it. JSON, HTML/XML and CSS get a
- * real formatter; other code (Python, JS, …) is detected only for syntax
- * highlighting (no Format action, so we never ship a naive reformatter that could
- * corrupt code).
+ * Detect what a captured text item is, conservatively. High-precision checks handle
+ * the formats that get special treatment (JSON, HTML/XML, Markdown, CSS); everything
+ * else only earns a specific language label from a bundled detector when it's
+ * *confident*. When nothing is confident we return null so the caller shows the plain
+ * text view — a wrong confident label (e.g. Markdown → "SQL") is worse than none.
+ *
+ * Priority / tie-break order (structured formats win): JSON → HTML/XML → Markdown →
+ * CSS → other language (only at high confidence) → plain text (null).
  */
 import * as beautify from "js-beautify";
+import { detectLanguage, languageLabel } from "./highlight";
 
 export type CodeInfo = {
-  /** highlight.js language id to use, or null to auto-detect (generic code). */
-  hljsLang: string | null;
-  /** Display label, e.g. "JSON", "HTML", "CSS", "Code". */
+  /** highlight.js language id for coloring the Raw (and Formatted) view. */
+  hljsLang: string;
+  /** Honest display label, e.g. "JSON", "HTML", "Markdown", "CSS", "Python". */
   label: string;
-  /** Whether a correct Format action is available. */
+  /** Has a correct Formatted (pretty-print) mode — JSON / HTML / XML / CSS only. */
   formattable: boolean;
   /** Pretty-printer; throws on malformed input (caller shows an inline error). */
   format?: (src: string) => string;
+  /** Has a Rendered (Markdown preview) mode. */
+  markdown: boolean;
 };
+
+// A guess is only trusted as a specific language when it clears both bars, so
+// ambiguous prose never gets a confident programming-language label.
+const MIN_RELEVANCE = 10;
+const MIN_MARGIN = 2;
+// Enough distinct Markdown signals to be sure (weighted; several, not one).
+const MARKDOWN_THRESHOLD = 3;
 
 function isJson(t: string): boolean {
   const s = t.trim();
   if (!(s.startsWith("{") || s.startsWith("["))) return false;
   try {
     const v = JSON.parse(s);
-    // Bare scalars (`"123"`, `42`, `true`) parse but aren't "code" worth a code view.
-    return v !== null && typeof v === "object";
+    return v !== null && typeof v === "object"; // ignore bare scalars
   } catch {
     return false;
   }
 }
 
-/** Returns "html", "xml", or null. Requires real tag structure, not just a stray `<`. */
+/** "html", "xml", or null. Requires real tag structure, not a stray `<`. */
 function detectMarkup(t: string): "html" | "xml" | null {
   const s = t.trim();
   if (/^<\?xml[\s>]/i.test(s)) return "xml";
@@ -44,34 +56,48 @@ function detectMarkup(t: string): "html" | "xml" | null {
   ) {
     return "html";
   }
-  // Generic well-formed-ish markup with a namespace or closing tags → treat as XML.
   if (/^<[a-zA-Z]/.test(s) && /<\/[a-zA-Z]/.test(s)) return "xml";
   return null;
 }
 
+/** Weighted count of Markdown-specific signals. Distinctive constructs (headings,
+ *  fenced code, tables) weigh more; prose with a single stray `*` won't qualify. */
+function markdownScore(t: string): number {
+  let score = 0;
+  if (/^#{1,6}\s+\S/m.test(t)) score += 2; // ATX heading
+  if (/(^|\n)\s{0,3}(```|~~~)/.test(t)) score += 2; // fenced code block
+  if (/^\s*\|.+\|\s*$/m.test(t) && /^\s*\|?[\s:|-]*-{3,}[\s:|-]*$/m.test(t)) score += 2; // table
+  if (/^\s{0,3}[-*+]\s+\S/m.test(t)) score += 1; // unordered list
+  if (/^\s{0,3}\d+\.\s+\S/m.test(t)) score += 1; // ordered list
+  if (/\[[^\]]+\]\([^)\s]+\)/.test(t)) score += 1; // link
+  if (/!\[[^\]]*\]\([^)\s]+\)/.test(t)) score += 1; // image
+  if (/(\*\*|__)[^\s*_][^*_\n]*\1/.test(t)) score += 1; // bold
+  if (/^\s{0,3}>\s+\S/m.test(t)) score += 1; // blockquote
+  return score;
+}
+
 function isCss(t: string): boolean {
   const s = t.trim();
-  // At least one rule block containing a `prop: value;` declaration. The trailing
-  // semicolon distinguishes CSS from a JS object literal (which uses commas).
+  // A rule block with a `prop: value;` declaration. The trailing `;` distinguishes
+  // CSS from a JS object literal (which separates with commas).
   if (!/[^{}]+\{[\s\S]*?\}/.test(s)) return false;
   return /[a-zA-Z-]+\s*:\s*[^;{}]+;/.test(s);
 }
 
-/** Heuristic: does this look like source code at all (for highlight-only detection)?
- *  Requires real *structural* signals — bare parentheses or an English word like
- *  "class" won't trip it, so ordinary prose stays out of the code view. */
+/** Structural signals that content is source code at all (gates auto-detection so we
+ *  never even guess a language for ordinary prose). */
 function looksLikeCode(t: string): boolean {
   const s = t.trim();
   if (s.length < 8 || !/\n/.test(s)) return false;
   const structural = [
-    /\{[\s\S]*\}/.test(s), // a brace block
-    /;\s*$/m.test(s), // statement-ending semicolons
-    /=>|::|->|&&|\|\||===|!==|:=/.test(s), // operators/arrows
-    /^[ \t]{2,}\S/m.test(s), // indented block lines
-    /^\s*(#!|\/\/|\/\*|\*\s|--\s|#\s)/m.test(s), // comment lines
+    /\{[\s\S]*\}/.test(s),
+    /;\s*$/m.test(s),
+    /=>|::|->|&&|\|\||===|!==|:=/.test(s),
+    /^[ \t]{2,}\S/m.test(s),
+    /^\s*(#!|\/\/|\/\*|\*\s|--\s|#\s)/m.test(s),
   ].filter(Boolean).length;
   const keyword =
-    /\b(function|const|let|var|def|class|import|export|return|public|private|void|struct|fn|package|require|include|elif|namespace|interface|typedef|println|printf)\b/.test(
+    /\b(function|const|let|var|def|class|import|export|return|public|private|void|struct|fn|package|require|include|elif|namespace|interface|typedef|println|printf|SELECT|INSERT|UPDATE|CREATE)\b/.test(
       s
     );
   return structural >= 2 || (structural >= 1 && keyword);
@@ -86,8 +112,8 @@ const HTML_OPTS: beautify.HTMLBeautifyOptions = {
 const CSS_OPTS: beautify.CSSBeautifyOptions = { indent_size: 2 };
 
 /**
- * Classify `text`. Returns null for plain prose (so the caller shows the normal text
- * view instead of a code view).
+ * Classify `text`. Returns null for plain prose / anything we can't confidently type,
+ * so the caller shows the plain text detail view instead of a mislabeled code view.
  */
 export function detectCode(text: string): CodeInfo | null {
   if (!text || !text.trim()) return null;
@@ -98,6 +124,7 @@ export function detectCode(text: string): CodeInfo | null {
       label: "JSON",
       formattable: true,
       format: (s) => JSON.stringify(JSON.parse(s), null, 2),
+      markdown: false,
     };
   }
 
@@ -108,7 +135,12 @@ export function detectCode(text: string): CodeInfo | null {
       label: markup === "html" ? "HTML" : "XML",
       formattable: true,
       format: (s) => beautify.html(s, HTML_OPTS),
+      markdown: false,
     };
+  }
+
+  if (markdownScore(text) >= MARKDOWN_THRESHOLD) {
+    return { hljsLang: "markdown", label: "Markdown", formattable: false, markdown: true };
   }
 
   if (isCss(text)) {
@@ -117,14 +149,22 @@ export function detectCode(text: string): CodeInfo | null {
       label: "CSS",
       formattable: true,
       format: (s) => beautify.css(s, CSS_OPTS),
+      markdown: false,
     };
   }
 
+  // Other programming languages: only trust a specific label at high confidence.
   if (looksLikeCode(text)) {
-    // Detected as code for highlighting only — deliberately no Format action, since
-    // we can't reformat arbitrary languages without risking corruption.
-    return { hljsLang: null, label: "Code", formattable: false };
+    const det = detectLanguage(text);
+    if (det.language && det.relevance >= MIN_RELEVANCE && det.margin >= MIN_MARGIN) {
+      return {
+        hljsLang: det.language,
+        label: languageLabel(det.language),
+        formattable: false, // never fake-format arbitrary languages
+        markdown: false,
+      };
+    }
   }
 
-  return null;
+  return null; // plain text — caller shows the raw text view
 }

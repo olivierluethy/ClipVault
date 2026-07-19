@@ -105,6 +105,29 @@ export function languageLabel(lang: string | null | undefined): string {
 }
 
 /**
+ * Auto-detect the language of `code` across the registered set, returning the guess
+ * with its relevance and the margin over the runner-up. Callers use these to decide
+ * whether the guess is *confident* enough to show a specific language label — a low
+ * relevance or a narrow margin means "not sure", and the caller should fall back to a
+ * neutral label rather than assert a wrong one.
+ */
+export function detectLanguage(code: string): {
+  language: string | null;
+  relevance: number;
+  margin: number;
+} {
+  ensureRegistered();
+  try {
+    const r = hljs.highlightAuto(code);
+    const top = r.relevance ?? 0;
+    const second = r.secondBest?.relevance ?? 0;
+    return { language: r.language ?? null, relevance: top, margin: top - second };
+  } catch {
+    return { language: null, relevance: 0, margin: 0 };
+  }
+}
+
+/**
  * Highlight `code`. If `lang` is a known language it's used directly; otherwise the
  * language is auto-detected across the registered set. Returns HTML-safe markup
  * (highlight.js escapes the code content) plus the language actually used.
