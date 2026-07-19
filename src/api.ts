@@ -57,6 +57,13 @@ export const itemDayCounts = () => invoke<[string, number][]>("item_day_counts")
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
 export const copyItemClean = (id: string) => invoke<void>("copy_item_clean", { id });
 export const copyItemPlain = (id: string) => invoke<void>("copy_item_plain", { id });
+/** Place arbitrary (transformed/derived) text on the system clipboard without
+ *  creating a history entry. Fast path for Transform / Format actions. */
+export const copyText = (text: string) => invoke<void>("copy_text", { text });
+/** Store arbitrary text as a new history item; optionally copy it to the clipboard
+ *  too. Backs Multi-Copy-Merge and every "Save as new entry" action. */
+export const saveTextItem = (text: string, copyToClipboard: boolean) =>
+  invoke<void>("save_text_item", { text, copyToClipboard });
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 export const restoreItem = (id: string) => invoke<void>("restore_item", { id });
 export const setPinned = (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned });

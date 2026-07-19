@@ -30,6 +30,7 @@ import {
   openUrl,
   hideWindow,
   getHotkey,
+  saveTextItem,
 } from "./api";
 import { Card } from "./components/Card";
 import { ZoomModal } from "./components/ZoomModal";
@@ -52,6 +53,9 @@ import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon } fr
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
+
+// Item types whose text can be combined by Multi-Copy-Merge (images/gifs excluded).
+const MERGE_TYPES: Item["item_type"][] = ["text", "link", "number", "color"];
 
 export default function App() {
   const [folder, setFolder] = useState("all");
@@ -578,6 +582,39 @@ export default function App() {
     [selectedIds, clearSelection, reloadFolders, reloadCounts, reload]
   );
 
+  // Selected items in timeline order (flatItems is newest→oldest, top→bottom), used
+  // by Multi-Copy-Merge so the merged output follows the visible order.
+  const selectedItems = useMemo(
+    () => flatItems.filter((it) => selectedIds.has(it.id)),
+    [flatItems, selectedIds]
+  );
+  const mergeableCount = useMemo(
+    () =>
+      selectedItems.filter((it) => MERGE_TYPES.includes(it.item_type) && it.content != null).length,
+    [selectedItems]
+  );
+
+  const mergeSelected = useCallback(
+    async (separator: string) => {
+      const textItems = selectedItems.filter(
+        (it) => MERGE_TYPES.includes(it.item_type) && it.content != null
+      );
+      if (textItems.length < 2) return;
+      const merged = textItems.map((it) => it.content ?? "").join(separator);
+      const skipped = selectedItems.length - textItems.length;
+      await saveTextItem(merged, true);
+      clearSelection();
+      setQuickMsg(
+        `Merged ${textItems.length} items → copied${
+          skipped ? ` · ${skipped} image${skipped === 1 ? "" : "s"} skipped` : ""
+        } ✓`
+      );
+      if (quickMsgTimer.current) window.clearTimeout(quickMsgTimer.current);
+      quickMsgTimer.current = window.setTimeout(() => setQuickMsg(null), 2200);
+    },
+    [selectedItems, clearSelection]
+  );
+
   const bulkDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
@@ -792,7 +829,9 @@ export default function App() {
           <BulkActionBar
             count={selectedIds.size}
             total={flatItems.length}
+            mergeableCount={mergeableCount}
             folders={folders}
+            onMerge={mergeSelected}
             onAddToFolder={bulkAddToFolder}
             onSelectAll={selectAll}
             onDelete={bulkDelete}

@@ -164,6 +164,51 @@ pub fn copy_item_plain(state: State<AppState>, id: String) -> Result<(), String>
     state.writer.send(req).map_err(|e| e.to_string())
 }
 
+/// Write arbitrary UTF-8 `text` to the system clipboard, suppressing the echo so the
+/// watcher does not re-capture it as a new history item. Used by the per-item
+/// Transform actions (case conversions, strip-to-plain-text) and code Format, whose
+/// fast path copies a *derived* result out without creating an entry.
+#[tauri::command]
+pub fn copy_text(state: State<AppState>, text: String) -> Result<(), String> {
+    let req = WriteRequest { mime: "UTF8_STRING".into(), bytes: text.into_bytes() };
+    write_and_mark(&state, req)
+}
+
+/// Store arbitrary `text` as a NEW history item (its type inferred by the text
+/// classifier) and emit `item-added` so the timeline refreshes. When
+/// `copy_to_clipboard` is set, the text is also placed on the system clipboard
+/// immediately (echo suppressed so it isn't captured a second time). Powers
+/// Multi-Copy-Merge (`copy_to_clipboard = true`) and every "Save as new entry"
+/// action (`copy_to_clipboard = false`). Existing items are never modified.
+#[tauri::command]
+pub fn save_text_item(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    text: String,
+    copy_to_clipboard: bool,
+) -> Result<(), String> {
+    let hash = crate::hashing::sha256_hex(text.as_bytes());
+    let item_type = crate::classifier::classify_text(&text);
+    let new_item = crate::storage::NewItem {
+        item_type,
+        content: Some(text.clone()),
+        file_path: None,
+        preview_path: None,
+        content_hash: hash.clone(),
+    };
+    state
+        .storage
+        .insert_or_bump(new_item, now_ms())
+        .map_err(|e| e.to_string())?;
+    if copy_to_clipboard {
+        *state.last_self_copy.lock().unwrap() = Some(hash);
+        let req = WriteRequest { mime: "UTF8_STRING".into(), bytes: text.into_bytes() };
+        state.writer.send(req).map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("item-added", ());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn create_folder(state: State<AppState>, name: String) -> Result<String, String> {
     state.storage.create_folder(&name, now_ms()).map_err(|e| e.to_string())

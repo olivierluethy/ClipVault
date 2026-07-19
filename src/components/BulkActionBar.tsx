@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FolderDto } from "../api";
+import { LayersIcon } from "./Icon";
 
 function FolderDropdown(props: {
   folders: FolderDto[];
@@ -50,16 +51,154 @@ function FolderDropdown(props: {
   );
 }
 
+// Preset separators, plus a "custom" mode with a free-text field. Values are the
+// exact strings joined between items.
+const PRESETS: { key: string; label: string; value: string }[] = [
+  { key: "newline", label: "New line", value: "\n" },
+  { key: "comma", label: "Comma + space", value: ", " },
+  { key: "space", label: "Single space", value: " " },
+];
+
+const SEP_STORAGE_KEY = "clipvault.mergeSeparator";
+
+/** Recall the last-used separator (raw value). Defaults to a newline. */
+function loadSeparator(): string {
+  try {
+    const v = localStorage.getItem(SEP_STORAGE_KEY);
+    return v ?? "\n";
+  } catch {
+    return "\n";
+  }
+}
+
+function MergePopover(props: {
+  mergeableCount: number;
+  skippedCount: number;
+  onMerge: (separator: string) => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const initial = loadSeparator();
+  const initialPreset = PRESETS.find((p) => p.value === initial);
+  const [presetKey, setPresetKey] = useState<string>(initialPreset ? initialPreset.key : "custom");
+  const [custom, setCustom] = useState<string>(initialPreset ? "" : initial);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) props.onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.onClose();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [props.onClose]);
+
+  const resolvedSeparator = () => {
+    if (presetKey === "custom") return custom;
+    return PRESETS.find((p) => p.key === presetKey)?.value ?? "\n";
+  };
+
+  const doMerge = () => {
+    const sep = resolvedSeparator();
+    try {
+      localStorage.setItem(SEP_STORAGE_KEY, sep);
+    } catch {
+      /* non-fatal: separator just won't be remembered */
+    }
+    props.onMerge(sep);
+    props.onClose();
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute left-0 top-full mt-1 z-30 w-64 rounded-lg border border-border bg-bg-raised p-2 shadow-2xl shadow-black/50"
+    >
+      <div className="px-1 pb-1.5 text-[10px] font-mono uppercase tracking-wider text-fg-faint">
+        Separator
+      </div>
+      <div className="space-y-0.5">
+        {PRESETS.map((p) => (
+          <label
+            key={p.key}
+            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-fg hover:bg-bg-hover"
+          >
+            <input
+              type="radio"
+              name="merge-sep"
+              checked={presetKey === p.key}
+              onChange={() => setPresetKey(p.key)}
+              className="accent-accent"
+            />
+            <span>{p.label}</span>
+          </label>
+        ))}
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-fg hover:bg-bg-hover">
+          <input
+            type="radio"
+            name="merge-sep"
+            checked={presetKey === "custom"}
+            onChange={() => setPresetKey("custom")}
+            className="accent-accent"
+          />
+          <span>Custom</span>
+        </label>
+        {presetKey === "custom" && (
+          <input
+            type="text"
+            value={custom}
+            autoFocus
+            onChange={(e) => setCustom(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") doMerge();
+            }}
+            placeholder="e.g.  •  or  ; "
+            className="mt-0.5 w-full rounded-md border border-border bg-bg px-2 py-1.5 font-mono text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none"
+          />
+        )}
+      </div>
+
+      {props.skippedCount > 0 && (
+        <p className="mt-2 px-1 text-xs text-fg-muted">
+          {props.skippedCount} non-text item{props.skippedCount === 1 ? "" : "s"} will be skipped.
+        </p>
+      )}
+
+      <button
+        onClick={doMerge}
+        className="mt-2 w-full rounded-md border border-accent bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent transition-colors hover:bg-accent hover:text-bg"
+      >
+        Merge {props.mergeableCount} item{props.mergeableCount === 1 ? "" : "s"} &amp; copy
+      </button>
+    </div>
+  );
+}
+
 export function BulkActionBar(props: {
   count: number;
   total: number;
+  mergeableCount: number;
   folders: FolderDto[];
+  onMerge: (separator: string) => void;
   onAddToFolder: (folderId: string) => void;
   onSelectAll: () => void;
   onDelete: () => void;
   onClear: () => void;
 }) {
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+  const [mergeMenuOpen, setMergeMenuOpen] = useState(false);
+
+  const canMerge = props.mergeableCount >= 2;
+  const mergeTitle = canMerge
+    ? "Combine the selected text items into one new entry"
+    : props.mergeableCount === 1
+    ? "Select at least 2 text items to merge"
+    : "Select text items to merge (images can't be merged)";
 
   return (
     <div className="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-bg-raised px-3 py-2 shrink-0 sm:px-4">
@@ -72,6 +211,25 @@ export function BulkActionBar(props: {
           Select all {props.total}
         </button>
       )}
+      <div className="relative shrink-0">
+        <button
+          onClick={() => canMerge && setMergeMenuOpen((v) => !v)}
+          disabled={!canMerge}
+          title={mergeTitle}
+          className="flex items-center gap-1.5 whitespace-nowrap rounded border border-border px-2 py-1 text-sm text-fg hover:bg-bg-card disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+        >
+          <LayersIcon className="h-4 w-4" />
+          Merge{canMerge ? ` ${props.mergeableCount}` : ""} ▾
+        </button>
+        {mergeMenuOpen && canMerge && (
+          <MergePopover
+            mergeableCount={props.mergeableCount}
+            skippedCount={props.count - props.mergeableCount}
+            onMerge={props.onMerge}
+            onClose={() => setMergeMenuOpen(false)}
+          />
+        )}
+      </div>
       <div className="relative shrink-0">
         <button
           onClick={() => setFolderMenuOpen((v) => !v)}
