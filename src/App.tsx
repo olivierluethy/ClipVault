@@ -45,6 +45,7 @@ import { toRows } from "./lib/dates";
 import { buildDateNav } from "./lib/dateNav";
 import { DateRail } from "./components/DateRail";
 import { DateNavMenu } from "./components/DateNavMenu";
+import { ListHeader } from "./components/ListHeader";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon } from "./components/Icon";
@@ -851,8 +852,13 @@ export default function App() {
         )}
 
         <div className="flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1">
-        <div ref={parentRef} className="flex-1 overflow-auto px-3 py-3 min-h-0">
+          <div className="relative flex min-w-0 flex-1 flex-col">
+        {rows.length > 0 && <ListHeader />}
+        <div
+          ref={parentRef}
+          className="flex-1 overflow-auto px-3 py-3 min-h-0"
+          style={{ scrollbarGutter: "stable" }}
+        >
           {isEmpty &&
             (!isSearching && !dateRange && folder === "frequent" ? (
               <div className="mx-auto mt-16 max-w-xs text-center">

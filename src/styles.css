@@ -44,10 +44,28 @@ body {
   container: card / inline-size;
 }
 
-/* Reserves room for the resting meta (time · ×N · pin) which cross-fades to the
+/* Reserves room for the resting meta (time · Used N× · pin) which cross-fades to the
    hover action cluster. Collapses to just its buttons on tight rows. */
 .card-actions-zone {
   width: 164px;
+}
+
+/* Sticky column header (ListHeader): its own `card` container so the shared
+   card-* column rules below collapse its labels in lockstep with the rows. Its
+   content-box width equals a row's, so the 500/380px breakpoints fire together. */
+.list-col-header {
+  container: card / inline-size;
+}
+
+/* Header checkbox spacer — matches the row checkbox column WIDTH only (not its
+   taller touch height), so the header stays slim while Type/Content stay aligned. */
+.lch-checkbox {
+  width: 2rem;
+}
+@container card (max-width: 500px) {
+  .lch-checkbox {
+    width: 2.5rem;
+  }
 }
 
 /* Tight rows (narrow window): drop the meta column and the low-priority inline
