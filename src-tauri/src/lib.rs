@@ -1,5 +1,6 @@
 mod hashing;
 mod cleantext;
+pub mod cli;
 mod storage;
 mod classifier;
 mod watcher;
