@@ -299,7 +299,7 @@ pub(crate) fn quick_add_core(
     app: &tauri::AppHandle,
     state: &AppState,
 ) -> Result<bool, String> {
-    let Some(ev) = crate::watcher::x11::read_clipboard_once() else { return Ok(false) };
+    let Some(ev) = crate::watcher::read_clipboard_once() else { return Ok(false) };
     let added = crate::capture::process_event(&state.storage, ev, &state.last_self_copy)
         .map_err(|e| e.to_string())?
         .is_some();

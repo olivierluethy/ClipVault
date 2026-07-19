@@ -10,6 +10,42 @@ pub struct WriteRequest {
     pub bytes: Vec<u8>,
 }
 
+/// Spawn a Wayland clipboard-writer thread, serving writes via `wl-copy`. Used on a
+/// pure-Wayland session (see `watcher::wayland::should_use_wayland`). `wl-copy` forks
+/// to keep serving the selection until it's replaced, matching the X11 writer's
+/// persistence.
+pub fn spawn_wayland() -> Sender<WriteRequest> {
+    let (tx, rx) = channel::<WriteRequest>();
+    std::thread::spawn(move || {
+        use std::io::Write;
+        use std::process::Stdio;
+        for req in rx {
+            let mime = if req.mime == "UTF8_STRING" {
+                "text/plain;charset=utf-8".to_string()
+            } else {
+                req.mime.clone()
+            };
+            let child = std::process::Command::new("wl-copy")
+                .args(["--type", &mime])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+            match child {
+                Ok(mut child) => {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        let _ = stdin.write_all(&req.bytes);
+                        // drop stdin here → EOF so wl-copy reads all bytes then forks
+                    }
+                    let _ = child.wait();
+                }
+                Err(e) => eprintln!("clipvault: wl-copy failed: {e}"),
+            }
+        }
+    });
+    tx
+}
+
 /// Spawn the clipboard-writer thread and return a channel to send it `WriteRequest`s.
 ///
 /// The thread owns its own `x11-clipboard::Clipboard` (a clipboard-manager connection is

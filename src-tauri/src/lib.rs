@@ -98,7 +98,13 @@ pub fn run() {
             let privacy = Arc::new(AtomicBool::new(privacy_init));
             let exclude_secrets = Arc::new(AtomicBool::new(storage.get_bool("exclude_secrets", true)));
             let last_self_copy: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-            let writer = crate::clipboard_writer::spawn();
+            // Pick the clipboard writer to match the session: wl-copy on a pure-Wayland
+            // session, the X11 writer otherwise.
+            let writer = if crate::watcher::wayland::should_use_wayland() {
+                crate::clipboard_writer::spawn_wayland()
+            } else {
+                crate::clipboard_writer::spawn()
+            };
 
             app.manage(crate::state::AppState {
                 storage: storage.clone(),
@@ -140,17 +146,23 @@ pub fn run() {
             let privacy_w = privacy.clone();
             let exclude_secrets_w = exclude_secrets.clone();
             std::thread::spawn(move || {
+                use crate::watcher::ClipboardBackend;
                 loop {
-                    match crate::watcher::x11::X11Backend::new() {
-                        Ok(backend) => {
-                            use crate::watcher::ClipboardBackend;
-                            // run() blocks; returns only on persistent failure (its internal
-                            // backoff prevents busy-looping while it's failing).
-                            Box::new(backend).run(tx.clone(), privacy_w.clone(), exclude_secrets_w.clone());
+                    if crate::watcher::wayland::should_use_wayland() {
+                        // Pure-Wayland session (no XWayland): poll via wl-clipboard.
+                        Box::new(crate::watcher::wayland::WaylandBackend::new())
+                            .run(tx.clone(), privacy_w.clone(), exclude_secrets_w.clone());
+                    } else {
+                        match crate::watcher::x11::X11Backend::new() {
+                            Ok(backend) => {
+                                // run() blocks; returns only on persistent failure (its internal
+                                // backoff prevents busy-looping while it's failing).
+                                Box::new(backend).run(tx.clone(), privacy_w.clone(), exclude_secrets_w.clone());
+                            }
+                            Err(e) => eprintln!("clipvault: clipboard backend unavailable: {e}"),
                         }
-                        Err(e) => eprintln!("clipvault: clipboard backend unavailable: {e}"),
                     }
-                    // Backend exited/failed — wait before restarting so a dead X server
+                    // Backend exited/failed — wait before restarting so a dead server
                     // doesn't spin.
                     std::thread::sleep(std::time::Duration::from_secs(5));
                 }

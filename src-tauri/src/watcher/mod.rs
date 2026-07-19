@@ -3,11 +3,22 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 pub mod x11;
+pub mod wayland;
 
 #[derive(Debug, Clone)]
 pub struct ClipEvent {
     pub mime: String,
     pub bytes: Vec<u8>,
+}
+
+/// Read the CURRENT clipboard value once, using the Wayland tools on a pure-Wayland
+/// session or the X11 backend otherwise. Used by Quick-Add.
+pub fn read_clipboard_once() -> Option<ClipEvent> {
+    if wayland::should_use_wayland() {
+        wayland::read_clipboard_once()
+    } else {
+        x11::read_clipboard_once()
+    }
 }
 
 pub trait ClipboardBackend: Send {
