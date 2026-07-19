@@ -17,6 +17,8 @@ export type Item = {
   created_at: number;
   updated_at: number;
   metadata: string | null;
+  /** Self-destruct time (epoch ms), or null to keep forever. */
+  expires_at: number | null;
 };
 
 export const listItems = (limit = 100, beforeCreatedAt?: number, beforeId?: string) =>
@@ -66,6 +68,9 @@ export const saveTextItem = (text: string, copyToClipboard: boolean) =>
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 export const restoreItem = (id: string) => invoke<void>("restore_item", { id });
 export const setPinned = (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned });
+/** Set/clear an item's self-destruct time (epoch ms; null = never expire). */
+export const setItemExpiry = (id: string, expiresAt: number | null) =>
+  invoke<void>("set_item_expiry", { id, expiresAt });
 export const updateContent = (id: string, content: string) => invoke<void>("update_content", { id, content });
 export const getPrivacy = () => invoke<boolean>("get_privacy");
 export const setPrivacy = (on: boolean) => invoke<void>("set_privacy", { on });

@@ -205,6 +205,24 @@ pub fn run() {
                 }
             });
 
+            // Ephemeral-entry reaper: hard-delete items whose self-destruct time has
+            // passed. Runs every 30s (finer-grained than the 30-min maintenance pass so
+            // short timers fire promptly); refreshes the UI when it removes anything.
+            let storage_reap = storage.clone();
+            let handle_reap = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                if let Ok(removed) = storage_reap.purge_expired(now_ms()) {
+                    if !removed.is_empty() {
+                        for (fp, pp) in removed {
+                            if let Some(p) = fp { let _ = std::fs::remove_file(p); }
+                            if let Some(p) = pp { let _ = std::fs::remove_file(p); }
+                        }
+                        let _ = handle_reap.emit("item-added", ());
+                    }
+                }
+            });
+
             // Background maintenance: enforce retention limits and take scheduled
             // backups. Reads its cadence/limits from settings each pass so changes in
             // the Settings screen take effect without a restart. Runs every 30 min
@@ -297,6 +315,7 @@ pub fn run() {
             crate::ipc::set_pinned,
             crate::ipc::delete_item,
             crate::ipc::restore_item,
+            crate::ipc::set_item_expiry,
             crate::ipc::update_content,
             crate::ipc::copy_item,
             crate::ipc::copy_item_clean,

@@ -182,6 +182,19 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 8", [])?;
         version = 8;
     }
+    if version < 9 {
+        // Ephemeral entries (self-destruct): an optional absolute expiry (epoch ms).
+        // A background reaper hard-deletes rows past their expiry.
+        let existing: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('items')")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        if !existing.iter().any(|c| c == "expires_at") {
+            conn.execute("ALTER TABLE items ADD COLUMN expires_at INTEGER", [])?;
+        }
+        conn.execute("PRAGMA user_version = 9", [])?;
+        version = 9;
+    }
     let _ = version;
     Ok(())
 }

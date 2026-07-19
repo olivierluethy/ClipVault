@@ -84,6 +84,13 @@ pub fn restore_item(state: State<AppState>, id: String) -> Result<(), String> {
     state.storage.restore(&id).map_err(|e| e.to_string())
 }
 
+/// Set or clear an item's self-destruct time (epoch ms; `None` = never expire).
+/// A background reaper hard-deletes items once their expiry passes.
+#[tauri::command]
+pub fn set_item_expiry(state: State<AppState>, id: String, expires_at: Option<i64>) -> Result<(), String> {
+    state.storage.set_expiry(&id, expires_at).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn update_content(state: State<AppState>, id: String, content: String) -> Result<(), String> {
     state.storage.update_content(&id, &content, now_ms()).map_err(|e| e.to_string())

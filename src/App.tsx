@@ -7,6 +7,7 @@ import {
   deleteItem,
   restoreItem,
   setPinned,
+  setItemExpiry,
   updateContent,
   getPrivacy,
   setPrivacy,
@@ -294,6 +295,17 @@ export default function App() {
   const edit = useCallback((it: Item) => {
     if (["text", "link", "number", "color"].includes(it.item_type)) setEditingId(it.id);
   }, []);
+
+  // Set/clear an item's self-destruct timer. `minutes` null clears it.
+  const setExpiry = useCallback(
+    async (it: Item, minutes: number | null) => {
+      await setItemExpiry(it.id, minutes == null ? null : Date.now() + minutes * 60_000);
+      reload();
+      reloadCounts();
+      if (isSearching) runSearch();
+    },
+    [reload, reloadCounts, isSearching, runSearch]
+  );
 
   // "View full value" routes to the code detail view (syntax-highlighted, with
   // Format for JSON/HTML/CSS) when the text is detected as code, else the plain
@@ -916,6 +928,7 @@ export default function App() {
                   }}
                   onDelete={() => del(it)}
                   onPin={() => pin(it)}
+                  onSetExpiry={(minutes) => setExpiry(it, minutes)}
                   onZoom={() => setZoom(it)}
                   onQr={() => setQrText(it.content ?? "")}
                   onOpenLink={() => it.content && openUrl(it.content)}
@@ -1022,6 +1035,7 @@ export default function App() {
                         onCleanCopy={() => cleanCopy(row.item)}
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
+                        onSetExpiry={(minutes) => setExpiry(row.item, minutes)}
                         onZoom={() => setZoom(row.item)}
                         onQr={() => setQrText(row.item.content ?? "")}
                         onOpenLink={() => row.item.content && openUrl(row.item.content)}

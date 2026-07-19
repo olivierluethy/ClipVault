@@ -64,17 +64,20 @@ pub struct ItemDto {
     /// after a link item is captured. `None` until the background fetch completes (or if
     /// link metadata fetching is disabled / the fetch failed).
     pub metadata: Option<String>,
+    /// Optional self-destruct time (epoch ms). When set and reached, a background
+    /// reaper hard-deletes the item. `None` = keeps forever (the default).
+    pub expires_at: Option<i64>,
 }
 
 pub(crate) const ITEM_COLS: &str =
-    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata";
+    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at";
 
 pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
         id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?, file_path: r.get(3)?,
         preview_path: r.get(4)?, copy_count: r.get(5)?, reuse_count: r.get(6)?,
         pinned: r.get::<_, i64>(7)? != 0, created_at: r.get(8)?, updated_at: r.get(9)?,
-        metadata: r.get(10)?,
+        metadata: r.get(10)?, expires_at: r.get(11)?,
     })
 }
 
@@ -351,6 +354,35 @@ impl Storage {
             params![id, content],
         )?;
         Ok(())
+    }
+
+    /// Set (or clear, with `None`) an item's self-destruct time (epoch ms).
+    pub fn set_expiry(&self, id: &str, expires_at: Option<i64>) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET expires_at = ?1 WHERE id = ?2",
+            params![expires_at, id],
+        )?;
+        Ok(())
+    }
+
+    /// Hard-delete every item whose expiry has passed (`expires_at <= now`), returning
+    /// the `(file_path, preview_path)` of each so the caller can remove attachments.
+    /// Irreversible — ephemeral items are truly gone (no soft-delete/undo).
+    pub fn purge_expired(&self, now: i64) -> rusqlite::Result<Vec<(Option<String>, Option<String>)>> {
+        let conn = self.conn.lock().unwrap();
+        let victims: Vec<(String, Option<String>, Option<String>)> = conn
+            .prepare("SELECT id, file_path, preview_path FROM items WHERE expires_at IS NOT NULL AND expires_at <= ?1")?
+            .query_map(params![now], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut files = Vec::with_capacity(victims.len());
+        for (id, fp, pp) in victims {
+            conn.execute("DELETE FROM items WHERE id = ?1", params![id])?;
+            conn.execute("DELETE FROM items_fts WHERE item_id = ?1", params![id])?;
+            conn.execute("DELETE FROM item_folders WHERE item_id = ?1", params![id])?;
+            files.push((fp, pp));
+        }
+        Ok(files)
     }
 
     pub fn restore(&self, id: &str) -> rusqlite::Result<()> {

@@ -232,6 +232,14 @@ export const CodeIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A clock — marks ephemeral / self-destruct (auto-delete) entries.
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+
 export const LockIcon = (p: IconProps) => (
   <Svg {...p}>
     <rect x="4.5" y="10.5" width="15" height="10" rx="2" />

@@ -20,6 +20,7 @@ import {
   RepeatIcon,
   LockIcon,
   EyeOffIcon,
+  ClockIcon,
 } from "./Icon";
 import { looksSecret } from "../lib/secret";
 
@@ -37,6 +38,25 @@ function timeLabel(ts: number): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+/** Compact "time left" until an expiry (epoch ms): "9m", "2h", "expiring…". */
+function remainingLabel(expiresAt: number): string {
+  const ms = expiresAt - Date.now();
+  if (ms <= 0) return "expiring…";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${Math.max(1, mins)}m`;
+  const hrs = Math.round(mins / 60);
+  return `${hrs}h`;
+}
+
+// Auto-delete presets (label → minutes).
+const EXPIRY_OPTIONS: { label: string; minutes: number }[] = [
+  { label: "5 minutes", minutes: 5 },
+  { label: "30 minutes", minutes: 30 },
+  { label: "1 hour", minutes: 60 },
+  { label: "6 hours", minutes: 360 },
+  { label: "24 hours", minutes: 1440 },
+];
 
 /** A round icon button for the hover action rail and overflow trigger. */
 function IconButton(props: {
@@ -289,6 +309,7 @@ export function Card(props: {
   onCleanCopy: () => void;
   onDelete: () => void;
   onPin: () => void;
+  onSetExpiry: (minutes: number | null) => void;
   onZoom: () => void;
   onQr: () => void;
   onOpenLink: () => void;
@@ -316,6 +337,7 @@ export function Card(props: {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [transformMenuOpen, setTransformMenuOpen] = useState(false);
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [expiryMenuOpen, setExpiryMenuOpen] = useState(false);
   const folderBtnRef = useRef<HTMLButtonElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -450,6 +472,16 @@ export function Card(props: {
               <span className="tnum leading-none">Used {item.reuse_count}×</span>
             </span>
           )}
+          {item.expires_at != null && (
+            <span
+              title={`Auto-deletes ${new Date(item.expires_at).toLocaleString()}`}
+              aria-label={`Auto-deletes in ${remainingLabel(item.expires_at)}`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 py-[1.5px] pl-1.5 pr-2 text-amber-300"
+            >
+              <ClockIcon className="h-3 w-3" />
+              <span className="tnum leading-none">{remainingLabel(item.expires_at)}</span>
+            </span>
+          )}
           {item.pinned && <PinIcon className="h-3.5 w-3.5 text-accent" />}
         </div>
         <div className="card-actions pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
@@ -578,9 +610,47 @@ export function Card(props: {
         <MenuItem icon={<PinIcon className="h-4 w-4" />} onClick={() => { props.onPin(); setMoreMenuOpen(false); }}>
           {item.pinned ? "Unpin" : "Pin"}
         </MenuItem>
+        <MenuItem
+          icon={<ClockIcon className="h-4 w-4" />}
+          onClick={() => {
+            setMoreMenuOpen(false);
+            setExpiryMenuOpen(true);
+          }}
+        >
+          {item.expires_at ? `Auto-delete (${remainingLabel(item.expires_at)})` : "Auto-delete…"}
+        </MenuItem>
         <MenuItem icon={<TrashIcon className="h-4 w-4" />} danger onClick={() => { props.onDelete(); setMoreMenuOpen(false); }}>
           Delete
         </MenuItem>
+      </Popover>
+
+      <Popover anchorEl={moreBtnRef.current} open={expiryMenuOpen} onClose={() => setExpiryMenuOpen(false)} width={200}>
+        <div className="px-2.5 pb-1 pt-1 text-[10px] font-mono uppercase tracking-wider text-fg-faint">
+          Self-destruct in
+        </div>
+        {EXPIRY_OPTIONS.map((o) => (
+          <MenuItem
+            key={o.minutes}
+            icon={<ClockIcon className="h-4 w-4" />}
+            onClick={() => {
+              props.onSetExpiry(o.minutes);
+              setExpiryMenuOpen(false);
+            }}
+          >
+            {o.label}
+          </MenuItem>
+        ))}
+        {item.expires_at != null && (
+          <MenuItem
+            icon={<CheckIcon className="h-4 w-4" />}
+            onClick={() => {
+              props.onSetExpiry(null);
+              setExpiryMenuOpen(false);
+            }}
+          >
+            Keep forever (cancel)
+          </MenuItem>
+        )}
       </Popover>
 
       {contentBased && (
