@@ -208,6 +208,15 @@ export const RepeatIcon = (p: IconProps) => (
   </Svg>
 );
 
+// Two swapping arrows over a bar — marks the "Find & replace" action.
+export const ReplaceIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 5h9M4 5l2.5-2.5M4 5l2.5 2.5" />
+    <path d="M20 13h-9M20 13l-2.5-2.5M20 13l-2.5 2.5" />
+    <path d="M5 19h14" />
+  </Svg>
+);
+
 // A magic wand with a sparkle — marks the non-destructive "Transform" text actions.
 export const WandIcon = (p: IconProps) => (
   <Svg {...p}>
@@ -220,6 +229,21 @@ export const WandIcon = (p: IconProps) => (
 export const CodeIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M8 8l-4 4 4 4M16 8l4 4-4 4" />
+  </Svg>
+);
+
+export const LockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+    <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+  </Svg>
+);
+
+export const EyeOffIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 3l18 18" />
+    <path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.2 6.2A17 17 0 0 0 2 12s3.5 6 10 6a9.6 9.6 0 0 0 4-.86" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
   </Svg>
 );
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { FolderDto, Item } from "../api";
 import { Popover, MenuItem } from "./Popover";
 import { TransformMenu } from "./TransformMenu";
+import { FindReplaceMenu } from "./FindReplaceMenu";
 import {
   CopyIcon,
   PinIcon,
@@ -14,9 +15,13 @@ import {
   ExternalLinkIcon,
   MoreIcon,
   WandIcon,
+  ReplaceIcon,
   CheckIcon,
   RepeatIcon,
+  LockIcon,
+  EyeOffIcon,
 } from "./Icon";
+import { looksSecret } from "../lib/secret";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
@@ -170,6 +175,8 @@ function parseLinkMetadata(metadata: string | null): LinkMetadata | null {
 function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
   const thumb = item.preview_path ?? item.file_path;
   const linkMeta = item.item_type === "link" ? parseLinkMetadata(item.metadata) : null;
+  const [revealed, setRevealed] = useState(false);
+  const secret = looksSecret(item.content, item.item_type);
 
   if (item.item_type === "color") {
     return (
@@ -219,6 +226,27 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
     );
   }
   if (item.item_type === "text" || item.item_type === "number") {
+    if (secret) {
+      return (
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <LockIcon className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+          <span className="min-w-0 flex-1 truncate font-mono text-sm text-fg/90">
+            {revealed ? item.content : "••••••••••••"}
+          </span>
+          <button
+            title={revealed ? "Hide secret" : "Reveal secret"}
+            aria-label={revealed ? "Hide secret" : "Reveal secret"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setRevealed((v) => !v);
+            }}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-faint hover:bg-bg-hover hover:text-fg"
+          >
+            {revealed ? <EyeOffIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
+          </button>
+        </span>
+      );
+    }
     return (
       <span className="min-w-0 flex-1 truncate font-mono text-sm text-fg/90">{item.content}</span>
     );
@@ -287,6 +315,7 @@ export function Card(props: {
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [transformMenuOpen, setTransformMenuOpen] = useState(false);
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const folderBtnRef = useRef<HTMLButtonElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -525,6 +554,17 @@ export function Card(props: {
             Transform…
           </MenuItem>
         )}
+        {contentBased && (
+          <MenuItem
+            icon={<ReplaceIcon className="h-4 w-4" />}
+            onClick={() => {
+              setMoreMenuOpen(false);
+              setFindReplaceOpen(true);
+            }}
+          >
+            Find &amp; replace…
+          </MenuItem>
+        )}
         {canViewFull && (
           <MenuItem icon={<EyeIcon className="h-4 w-4" />} onClick={() => { props.onExpandText(); setMoreMenuOpen(false); }}>
             View full value
@@ -550,6 +590,14 @@ export function Card(props: {
           onClose={() => setTransformMenuOpen(false)}
           content={item.content ?? ""}
           onCleanCopy={props.onCleanCopy}
+        />
+      )}
+      {contentBased && (
+        <FindReplaceMenu
+          anchorEl={moreBtnRef.current}
+          open={findReplaceOpen}
+          onClose={() => setFindReplaceOpen(false)}
+          content={item.content ?? ""}
         />
       )}
     </div>
