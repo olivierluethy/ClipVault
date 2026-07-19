@@ -144,6 +144,9 @@ export const qrSvg = (text: string) => invoke<string>("qr_svg", { text });
 /** Open a captured link in the user's default browser. */
 export const openUrl = (url: string) => invoke<void>("open_url", { url });
 
+/** Simulate Ctrl+V in the currently-focused window (the "paste directly" workflow). */
+export const pasteActive = () => invoke<void>("paste_active");
+
 /** The global hotkey that opens ClipVault (accelerator string, e.g. "Ctrl+Alt+V"). */
 export const getHotkey = () => invoke<string>("get_hotkey");
 /** Re-register + persist the global open-hotkey. Rejects if it can't be registered. */

@@ -597,6 +597,22 @@ pub fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+// ─── Paste-directly (simulated Ctrl+V) ──────────────────────────────────────────
+
+/// Simulate a Ctrl+V keystroke in whatever window currently has focus. Used by the
+/// "paste directly" workflow: after the app copies an item and hides, the previously
+/// focused window regains focus and this pastes into it automatically. Best-effort —
+/// returns an error string the UI can ignore if input simulation isn't available.
+#[tauri::command]
+pub fn paste_active() -> Result<(), String> {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+    enigo.key(Key::Control, Direction::Press).map_err(|e| e.to_string())?;
+    enigo.key(Key::Unicode('v'), Direction::Click).map_err(|e| e.to_string())?;
+    enigo.key(Key::Control, Direction::Release).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ─── Global open-hotkey ─────────────────────────────────────────────────────────
 
 /// The hotkey used when the user hasn't chosen one. Also the fallback in `lib.rs`

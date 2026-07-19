@@ -99,6 +99,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [backupInterval, setBackupInterval] = useState("24");
   const [backupKeep, setBackupKeep] = useState("7");
   const [hotkey, setHotkeyState] = useState("Ctrl+Alt+V");
+  const [autoPaste, setAutoPaste] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -114,6 +115,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setBackupInterval(numOr(await getSettingStr("backup_interval_hours"), "24"));
       setBackupKeep(numOr(await getSettingStr("backup_keep"), "7"));
       setHotkeyState(await getHotkey());
+      setAutoPaste((await getSettingStr("auto_paste")) === "1");
       setStats(await getStats());
     })();
   }, []);
@@ -247,6 +249,18 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
               onChange={(v) => {
                 setAuto(v);
                 setAutostart(v);
+              }}
+            />
+          </Section>
+
+          <Section title="Workflow">
+            <Toggle
+              label="Paste directly after choosing an item"
+              hint="After Enter or a number key copies and hides ClipVault, auto-press Ctrl+V into the previous window. X11 only."
+              checked={autoPaste}
+              onChange={(v) => {
+                setAutoPaste(v);
+                setSettingStr("auto_paste", v ? "1" : "0");
               }}
             />
           </Section>

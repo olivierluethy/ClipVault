@@ -351,6 +351,7 @@ pub fn run() {
             crate::ipc::open_url,
             crate::ipc::get_hotkey,
             crate::ipc::set_hotkey,
+            crate::ipc::paste_active,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");

@@ -32,6 +32,7 @@ import {
   hideWindow,
   getHotkey,
   saveTextItem,
+  pasteActive,
 } from "./api";
 import { Card } from "./components/Card";
 import { CodeModal } from "./components/CodeModal";
@@ -74,6 +75,7 @@ export default function App() {
   const [codeItem, setCodeItem] = useState<Item | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [hotkey, setHotkey] = useState("Ctrl+Alt+V");
+  const [autoPaste, setAutoPaste] = useState(false);
   const [draggingIds, setDraggingIds] = useState<string[] | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -125,6 +127,11 @@ export default function App() {
   // Keep the open-hotkey label (shown in the Welcome tips) in sync with settings.
   useEffect(() => {
     getHotkey().then(setHotkey);
+  }, []);
+
+  // "Paste directly" preference: after copy-and-hide, auto-send Ctrl+V.
+  useEffect(() => {
+    getSettingStr("auto_paste").then((v) => setAutoPaste(v === "1"));
   }, []);
 
   const dismissWelcome = useCallback(() => {
@@ -654,8 +661,11 @@ export default function App() {
       await copyItem(it.id);
       refreshAfterReuse();
       await hideWindow();
+      // Paste directly into the window that regains focus. Small delay so the OS
+      // has refocused the previous app before the synthetic Ctrl+V lands.
+      if (autoPaste) window.setTimeout(() => pasteActive().catch(() => {}), 150);
     },
-    [refreshAfterReuse]
+    [refreshAfterReuse, autoPaste]
   );
 
   const { sel, setSel } = useKeyboardNav(flatItems, {
