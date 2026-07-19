@@ -50,6 +50,16 @@ pub fn list_items_range(
 }
 
 #[tauri::command]
+pub fn list_frequent(state: State<AppState>, limit: i64) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_frequent(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn frequent_count(state: State<AppState>) -> Result<i64, String> {
+    state.storage.frequent_count().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn folder_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
     state.storage.folder_counts().map_err(|e| e.to_string())
 }

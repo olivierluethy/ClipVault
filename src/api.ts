@@ -43,6 +43,10 @@ export const listItemsRange = (
     beforeCreatedAt: beforeCreatedAt ?? null,
     beforeId: beforeId ?? null,
   });
+/** Most-copied items (copy_count >= 2), ranked by frequency then recency. Top-N, not paged. */
+export const listFrequent = (limit = 100) => invoke<Item[]>("list_frequent", { limit });
+/** How many items qualify for the Frequent view (copy_count >= 2). */
+export const frequentCount = () => invoke<number>("frequent_count");
 export const folderCounts = () => invoke<[string, number][]>("folder_counts");
 /** Distinct local days ("YYYY-MM-DD") that contain items, with counts. */
 export const itemDayCounts = () => invoke<[string, number][]>("item_day_counts");

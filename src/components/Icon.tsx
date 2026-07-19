@@ -191,6 +191,13 @@ export const ImageIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A flame — marks the "Frequent" smart view (the items you reach for most, kept hot).
+export const FlameIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3c.5 3-2 4-2 4C7 9 6 11.5 6 14a6 6 0 0 0 12 0c0-2.2-1-4-2.5-5.3.2 2-1 3-1.8 3.3.6-2.2-.4-4.7-1.7-6Z" />
+  </Svg>
+);
+
 export const SwatchIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="9" cy="9" r="3" />

@@ -197,6 +197,36 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Items copied more than once, ranked by how often (`copy_count` desc), then by
+    /// most recently copied (`updated_at` desc, `id` desc to break exact ties). Powers
+    /// the "Frequent" smart view. Ranking is over the whole live history; the result is
+    /// capped at `limit` (top-N) rather than cursor-paginated.
+    pub fn list_frequent(&self, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL AND copy_count >= 2
+             ORDER BY copy_count DESC, updated_at DESC, id DESC
+             LIMIT ?1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows: Vec<ItemDto> = stmt
+            .query_map(rusqlite::params![limit], map_item)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    /// How many live items qualify for the "Frequent" view (`copy_count >= 2`).
+    /// Drives the sidebar count next to that view; independent of the top-N cap.
+    pub fn frequent_count(&self) -> rusqlite::Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND copy_count >= 2",
+            [],
+            |r| r.get(0),
+        )
+    }
+
     /// Distinct local calendar days that contain at least one live item, with counts,
     /// as `("YYYY-MM-DD", n)`. Powers the date-picker's populated-day highlighting.
     pub fn item_day_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
@@ -425,6 +455,43 @@ mod tests {
         }
         seen.sort();
         assert_eq!(seen, vec!["a","b","c"]);  // all three retrieved, none skipped
+    }
+
+    #[test]
+    fn list_frequent_ranks_by_count_and_excludes_singles() {
+        let (_d, s) = storage();
+        let mk = |c: &str, h: &str| NewItem {
+            item_type: ItemType::Text, content: Some(c.into()),
+            file_path: None, preview_path: None, content_hash: h.into(),
+        };
+        // "once" copied a single time → excluded. "twice"/"thrice" qualify (>= 2).
+        s.insert_or_bump(mk("once", "h1"), 100).unwrap();
+        s.insert_or_bump(mk("twice", "h2"), 100).unwrap();
+        s.insert_or_bump(mk("twice", "h2"), 200).unwrap(); // count 2
+        s.insert_or_bump(mk("thrice", "h3"), 100).unwrap();
+        s.insert_or_bump(mk("thrice", "h3"), 200).unwrap();
+        s.insert_or_bump(mk("thrice", "h3"), 300).unwrap(); // count 3
+
+        let rows = s.list_frequent(100).unwrap();
+        // most-copied first, single-copy item absent
+        assert_eq!(
+            rows.iter().map(|i| i.content.clone().unwrap()).collect::<Vec<_>>(),
+            vec!["thrice", "twice"]
+        );
+        assert_eq!(s.frequent_count().unwrap(), 2);
+
+        // Tie on copy_count → more recently copied (updated_at) wins.
+        s.insert_or_bump(mk("tie-old", "h4"), 400).unwrap();
+        s.insert_or_bump(mk("tie-old", "h4"), 500).unwrap(); // count 2, updated 500
+        s.insert_or_bump(mk("tie-new", "h5"), 600).unwrap();
+        s.insert_or_bump(mk("tie-new", "h5"), 700).unwrap(); // count 2, updated 700
+        let rows = s.list_frequent(100).unwrap();
+        let twos: Vec<String> = rows
+            .iter()
+            .filter(|i| i.copy_count == 2)
+            .map(|i| i.content.clone().unwrap())
+            .collect();
+        assert_eq!(twos, vec!["tie-new", "tie-old", "twice"]);
     }
 
     #[test]

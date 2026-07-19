@@ -6,6 +6,7 @@ import {
   listByType,
   listItemsInFolder,
   listItemsRange,
+  listFrequent,
   onItemAdded,
 } from "../api";
 import { Row, toRows } from "../lib/dates";
@@ -46,6 +47,11 @@ export function useTimeline(folder: string, range: DateRange | null) {
       const head = await listItems(100);
       setItems(head);
       done.current = head.length < 100;
+    } else if (folder === "frequent") {
+      // Ranked-by-frequency smart view: top-N over the whole history, no paging.
+      setPinned([]);
+      setItems(await listFrequent(100));
+      done.current = true;
     } else if (folder === "image") {
       setPinned([]);
       const [images, gifs] = await Promise.all([listByType("image", 200), listByType("gif", 200)]);
@@ -98,7 +104,10 @@ export function useTimeline(folder: string, range: DateRange | null) {
     };
   }, [reload]);
 
-  const rows: Row[] = toRows(items);
+  // The Frequent view is a ranked list, not a chronology — render it flat (no date
+  // headers) so the order reads as "most-copied first" rather than by day.
+  const rows: Row[] =
+    folder === "frequent" ? items.map((item) => ({ kind: "item", item })) : toRows(items);
   const flatItems: Item[] = [...pinned, ...items];
   return { pinned, items, rows, flatItems, reload, loadMore };
 }

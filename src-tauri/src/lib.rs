@@ -290,6 +290,8 @@ pub fn run() {
             crate::ipc::list_pinned,
             crate::ipc::list_by_type,
             crate::ipc::list_items_range,
+            crate::ipc::list_frequent,
+            crate::ipc::frequent_count,
             crate::ipc::folder_counts,
             crate::ipc::item_day_counts,
             crate::ipc::set_pinned,

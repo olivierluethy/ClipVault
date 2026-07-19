@@ -7,16 +7,25 @@ import {
   HashIcon,
   ImageIcon,
   SwatchIcon,
+  FlameIcon,
   FolderIcon,
   FolderPlusIcon,
   EditIcon,
   TrashIcon,
 } from "./Icon";
 
-type SysFolder = { id: string; label: string; Icon: (p: { className?: string }) => React.JSX.Element };
+type SysFolder = {
+  id: string;
+  label: string;
+  Icon: (p: { className?: string }) => React.JSX.Element;
+  /** Fuller label for the icon-rail tooltip; falls back to `label`. */
+  title?: string;
+};
 
 const SYSTEM: SysFolder[] = [
   { id: "all", label: "All", Icon: LayersIcon },
+  // Smart view: ranked by how often each item was copied (not a type bucket).
+  { id: "frequent", label: "Frequent", Icon: FlameIcon, title: "Most frequently copied" },
   { id: "text", label: "Text", Icon: TextIcon },
   { id: "link", label: "Links", Icon: ExternalLinkIcon },
   { id: "number", label: "Numbers", Icon: HashIcon },
@@ -171,6 +180,7 @@ function UserFolderRow({
 
 export function Sidebar({
   counts,
+  frequentCount,
   selected,
   onSelect,
   folders,
@@ -183,6 +193,8 @@ export function Sidebar({
   onClose,
 }: {
   counts: Record<string, number>;
+  /** Count for the "Frequent" smart view; kept out of `counts` so "All" doesn't double it. */
+  frequentCount: number;
   selected: string;
   onSelect: (id: string) => void;
   folders: FolderDto[];
@@ -242,8 +254,8 @@ export function Sidebar({
               key={f.id}
               selected={selected === f.id}
               onSelect={() => pick(f.id)}
-              count={countFor(f.id, counts)}
-              title={f.label}
+              count={f.id === "frequent" ? frequentCount : countFor(f.id, counts)}
+              title={f.title ?? f.label}
             >
               <Icon className={`h-4 w-4 shrink-0 ${selected === f.id ? "text-accent" : ""}`} />
               <span className="truncate sb-full-only">{f.label}</span>

@@ -14,6 +14,7 @@ import {
   quickAdd,
   onPrivacyChanged,
   folderCounts,
+  frequentCount,
   onItemAdded,
   FolderDto,
   listFolders,
@@ -46,7 +47,7 @@ import { DateRail } from "./components/DateRail";
 import { DateNavMenu } from "./components/DateNavMenu";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
-import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon } from "./components/Icon";
+import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon } from "./components/Icon";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
@@ -74,6 +75,7 @@ export default function App() {
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [freqCount, setFreqCount] = useState(0);
   const [folders, setFolders] = useState<FolderDto[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const parentRef = useRef<HTMLDivElement>(null);
@@ -85,8 +87,9 @@ export default function App() {
   const suppressCheckboxClickRef = useRef(false);
 
   const reloadCounts = useCallback(async () => {
-    const list = await folderCounts();
+    const [list, freq] = await Promise.all([folderCounts(), frequentCount()]);
     setCounts(Object.fromEntries(list));
+    setFreqCount(freq);
   }, []);
 
   const reloadFolders = useCallback(async () => {
@@ -661,6 +664,7 @@ export default function App() {
     <div className="h-screen flex">
       <Sidebar
         counts={counts}
+        frequentCount={freqCount}
         selected={folder}
         onSelect={handleSelectFolder}
         folders={folders}
@@ -836,15 +840,27 @@ export default function App() {
         <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1">
         <div ref={parentRef} className="flex-1 overflow-auto px-3 py-3 min-h-0">
-          {isEmpty && (
-            <p className="text-fg-muted">
-              {isSearching
-                ? "No results."
-                : dateRange
-                ? "No items in this date range."
-                : "Nothing captured yet — copy something."}
-            </p>
-          )}
+          {isEmpty &&
+            (!isSearching && !dateRange && folder === "frequent" ? (
+              <div className="mx-auto mt-16 max-w-xs text-center">
+                <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full border border-border bg-bg-card text-accent">
+                  <FlameIcon className="h-6 w-6" />
+                </div>
+                <h2 className="text-sm font-medium text-fg">No frequent items yet</h2>
+                <p className="mt-1.5 text-sm text-fg-muted">
+                  Anything you copy more than once shows up here, ranked by how often you
+                  reach for it. Keep going — your go-to snippets will rise to the top.
+                </p>
+              </div>
+            ) : (
+              <p className="text-fg-muted">
+                {isSearching
+                  ? "No results."
+                  : dateRange
+                  ? "No items in this date range."
+                  : "Nothing captured yet — copy something."}
+              </p>
+            ))}
           <div style={{ height: virt.getTotalSize(), position: "relative" }}>
             {virt.getVirtualItems().map((v) => {
               const row = rows[v.index];
