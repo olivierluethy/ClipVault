@@ -597,6 +597,13 @@ pub fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Whether the optional `tesseract` OCR binary is available (so the Settings screen
+/// can tell the user why image-text search may be inactive).
+#[tauri::command]
+pub fn ocr_available() -> bool {
+    crate::ocr::tesseract_available()
+}
+
 // ─── Paste-directly (simulated Ctrl+V) ──────────────────────────────────────────
 
 /// Simulate a Ctrl+V keystroke in whatever window currently has focus. Used by the

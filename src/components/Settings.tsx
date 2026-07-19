@@ -16,6 +16,7 @@ import {
   importData,
   getHotkey,
   setHotkey,
+  ocrAvailable,
   Stats,
 } from "../api";
 
@@ -100,6 +101,8 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [backupKeep, setBackupKeep] = useState("7");
   const [hotkey, setHotkeyState] = useState("Ctrl+Alt+V");
   const [autoPaste, setAutoPaste] = useState(false);
+  const [ocrEnabled, setOcrEnabled] = useState(true);
+  const [ocrAvail, setOcrAvail] = useState(true);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -116,6 +119,8 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setBackupKeep(numOr(await getSettingStr("backup_keep"), "7"));
       setHotkeyState(await getHotkey());
       setAutoPaste((await getSettingStr("auto_paste")) === "1");
+      setOcrEnabled((await getSettingStr("ocr_enabled")) !== "0"); // default on
+      setOcrAvail(await ocrAvailable());
       setStats(await getStats());
     })();
   }, []);
@@ -298,6 +303,23 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
                 be registered it reverts to the previous shortcut.
               </span>
             </div>
+          </Section>
+
+          <Section title="Images">
+            <Toggle
+              label="Search text inside images (OCR)"
+              hint={
+                ocrAvail
+                  ? "Recognize text in captured images so you can search for it."
+                  : "Install the 'tesseract' package to enable image-text search."
+              }
+              checked={ocrEnabled && ocrAvail}
+              onChange={(v) => {
+                if (!ocrAvail) return;
+                setOcrEnabled(v);
+                setSettingStr("ocr_enabled", v ? "1" : "0");
+              }}
+            />
           </Section>
 
           <Section title="Retention">

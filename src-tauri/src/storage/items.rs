@@ -391,6 +391,20 @@ impl Storage {
         Ok(())
     }
 
+    /// Store OCR text recognized from an image item, and mirror it into the FTS index
+    /// so the image becomes searchable by its visible words. Replaces any existing FTS
+    /// row for the item (images have none until OCR runs).
+    pub fn set_ocr_text(&self, id: &str, text: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE items SET ocr_text = ?1 WHERE id = ?2", params![text, id])?;
+        conn.execute("DELETE FROM items_fts WHERE item_id = ?1", params![id])?;
+        conn.execute(
+            "INSERT INTO items_fts (item_id, content) VALUES (?1, ?2)",
+            params![id, text],
+        )?;
+        Ok(())
+    }
+
     /// Stores JSON-encoded link metadata (title + favicon URL) for an item, set
     /// asynchronously once the background fetch in `link_meta::fetch` completes.
     pub fn set_metadata(&self, id: &str, metadata_json: &str) -> rusqlite::Result<()> {

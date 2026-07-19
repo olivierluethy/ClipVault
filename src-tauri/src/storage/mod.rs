@@ -195,6 +195,19 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 9", [])?;
         version = 9;
     }
+    if version < 10 {
+        // Inline OCR: recognized text from images, stored invisibly and mirrored into
+        // the FTS index so images are searchable by the words shown in them.
+        let existing: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('items')")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        if !existing.iter().any(|c| c == "ocr_text") {
+            conn.execute("ALTER TABLE items ADD COLUMN ocr_text TEXT", [])?;
+        }
+        conn.execute("PRAGMA user_version = 10", [])?;
+        version = 10;
+    }
     let _ = version;
     Ok(())
 }

@@ -10,6 +10,7 @@ mod ipc;
 mod thumbnail;
 mod clipboard_writer;
 mod link_meta;
+mod ocr;
 mod qr;
 
 use std::sync::Arc;
@@ -187,6 +188,26 @@ pub fn run() {
                                         }
                                     }
                                 }
+
+                                // Inline OCR: recognize text in captured images off-thread
+                                // (best-effort; a no-op if tesseract isn't installed) and
+                                // store it as searchable metadata.
+                                if storage_c.get_bool("ocr_enabled", true) {
+                                    if let Ok(Some((ty, _, Some(path), _))) = storage_c.get_item(id) {
+                                        if ty == "image" || ty == "gif" {
+                                            let storage_ocr = storage_c.clone();
+                                            let handle_ocr = handle.clone();
+                                            let id_ocr = id.clone();
+                                            std::thread::spawn(move || {
+                                                if let Some(text) = crate::ocr::extract(&path) {
+                                                    if storage_ocr.set_ocr_text(&id_ocr, &text).is_ok() {
+                                                        let _ = handle_ocr.emit("item-added", ());
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
                             }
                         }
                         Ok(None) => {
@@ -353,6 +374,7 @@ pub fn run() {
             crate::ipc::get_hotkey,
             crate::ipc::set_hotkey,
             crate::ipc::paste_active,
+            crate::ipc::ocr_available,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");
