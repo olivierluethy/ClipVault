@@ -15,7 +15,7 @@ locally in SQLite, no cloud, no telemetry.
 
 - [What it does](#what-it-does)
 - [Quick start](#quick-start)
-- [Install (Ubuntu)](#install-ubuntu)
+- [Install (Ubuntu)](#install-ubuntu) — quick version; full guide in [`INSTALL.md`](INSTALL.md)
 - [Requirements](#requirements)
 - [How it works (architecture)](#how-it-works-architecture)
 - [Data model & storage](#data-model--storage)
@@ -92,6 +92,10 @@ The release binary is what an installed app or autostart entry runs.
 ClipVault ships as a `.deb`. Build it once, then install it. The installed app is
 **self-contained** — the UI is embedded, so there's no dev server and no "white screen" —
 it registers its launcher icon in the dock/app grid, and can autostart on login.
+
+> 📦 **See [`INSTALL.md`](INSTALL.md) for the full step-by-step build & install guide** —
+> one-time toolchain setup, build timing, optional features (OCR / Wayland), and a
+> troubleshooting table. The quick version is below.
 
 ### 1. Build the package
 
