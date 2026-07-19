@@ -43,7 +43,7 @@ import { QrModal } from "./components/QrModal";
 import { TextModal } from "./components/TextModal";
 import { useTimeline, DateRange } from "./hooks/useTimeline";
 import { useKeyboardNav } from "./hooks/useKeyboardNav";
-import { toRows } from "./lib/dates";
+import { toRows, toDomainRows } from "./lib/dates";
 import { buildDateNav } from "./lib/dateNav";
 import { DateRail } from "./components/DateRail";
 import { DateNavMenu } from "./components/DateNavMenu";
@@ -60,6 +60,7 @@ const MERGE_TYPES: Item["item_type"][] = ["text", "link", "number", "color"];
 
 export default function App() {
   const [folder, setFolder] = useState("all");
+  const [groupByDomain, setGroupByDomain] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder, dateRange);
@@ -209,7 +210,13 @@ export default function App() {
     setDateRange(r);
   }, [clearSearch]);
 
-  const rows = isSearching ? toRows(searchResults) : folderRows;
+  // The Links view can group by domain instead of by date.
+  const linkGrouping = folder === "link" && groupByDomain && !isSearching && !dateRange;
+  const rows = isSearching
+    ? toRows(searchResults)
+    : linkGrouping
+    ? toDomainRows(folderFlatItems)
+    : folderRows;
   const flatItems = isSearching ? searchResults : folderFlatItems;
 
   const handleCreateFolder = useCallback(
@@ -762,11 +769,13 @@ export default function App() {
               className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
             />
           </div>
-          <DateNavMenu
-            entries={dateNav}
-            topRowIndex={topRowIndex}
-            onJump={scrollToHeaderIndex}
-          />
+          {!linkGrouping && (
+            <DateNavMenu
+              entries={dateNav}
+              topRowIndex={topRowIndex}
+              onJump={scrollToHeaderIndex}
+            />
+          )}
           <DateFilter
             active={dateRange}
             onApply={applyDateRange}
@@ -824,6 +833,23 @@ export default function App() {
             <span>Showing items from <span className="text-fg">{dateRange.label}</span></span>
             <button onClick={() => setDateRange(null)} className="text-accent hover:underline">
               Clear
+            </button>
+          </div>
+        )}
+
+        {!isSearching && !dateRange && folder === "link" && (
+          <div className="flex items-center justify-between px-4 py-1.5 border-b border-border shrink-0 text-sm">
+            <span className="text-fg-muted">Links</span>
+            <button
+              onClick={() => setGroupByDomain((v) => !v)}
+              aria-pressed={groupByDomain}
+              className={`rounded-md border px-2 py-0.5 text-xs transition-colors ${
+                groupByDomain
+                  ? "border-accent/50 bg-accent/10 text-accent"
+                  : "border-border text-fg-muted hover:border-border-strong hover:text-fg"
+              }`}
+            >
+              {groupByDomain ? "Grouped by domain ✓" : "Group by domain"}
             </button>
           </div>
         )}
@@ -1018,7 +1044,9 @@ export default function App() {
               </div>
             )}
           </div>
-          <DateRail entries={dateNav} topRowIndex={topRowIndex} onJump={scrollToHeaderIndex} />
+          {!linkGrouping && (
+            <DateRail entries={dateNav} topRowIndex={topRowIndex} onJump={scrollToHeaderIndex} />
+          )}
         </div>
       </div>
 
