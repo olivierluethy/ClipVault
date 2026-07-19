@@ -193,6 +193,144 @@ body {
   font-weight: 600;
 }
 
+/* ─── Rendered Markdown preview ───────────────────────────────────────────────
+   Compact prose styling for the detail view's "Rendered" mode, tuned to the dark
+   surfaces and iris accent. Sanitized HTML only (see lib/markdown.ts). */
+.md-rendered {
+  color: #cdcdd8;
+  font-size: 14px;
+  line-height: 1.65;
+  word-wrap: break-word;
+}
+.md-rendered > :first-child {
+  margin-top: 0;
+}
+.md-rendered > :last-child {
+  margin-bottom: 0;
+}
+.md-rendered h1,
+.md-rendered h2,
+.md-rendered h3,
+.md-rendered h4,
+.md-rendered h5,
+.md-rendered h6 {
+  color: #ececf1;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.4em 0 0.6em;
+}
+.md-rendered h1 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #26262e;
+}
+.md-rendered h2 {
+  font-size: 1.3em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid #26262e;
+}
+.md-rendered h3 {
+  font-size: 1.15em;
+}
+.md-rendered h4 {
+  font-size: 1em;
+}
+.md-rendered p,
+.md-rendered ul,
+.md-rendered ol,
+.md-rendered blockquote,
+.md-rendered table,
+.md-rendered pre {
+  margin: 0.7em 0;
+}
+.md-rendered ul,
+.md-rendered ol {
+  padding-left: 1.6em;
+}
+.md-rendered ul {
+  list-style: disc;
+}
+.md-rendered ol {
+  list-style: decimal;
+}
+.md-rendered li {
+  margin: 0.25em 0;
+}
+.md-rendered li > ul,
+.md-rendered li > ol {
+  margin: 0.25em 0;
+}
+.md-rendered a {
+  color: #a99bff;
+  text-decoration: none;
+  cursor: pointer;
+}
+.md-rendered a:hover {
+  text-decoration: underline;
+}
+.md-rendered strong {
+  color: #ececf1;
+  font-weight: 600;
+}
+.md-rendered em {
+  font-style: italic;
+}
+.md-rendered code {
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace;
+  font-size: 0.88em;
+  background: #0e0e11;
+  border: 1px solid #26262e;
+  border-radius: 5px;
+  padding: 0.1em 0.36em;
+}
+.md-rendered pre {
+  background: #0e0e11;
+  border: 1px solid #26262e;
+  border-radius: 8px;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+}
+.md-rendered pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 0.85em;
+  line-height: 1.55;
+}
+.md-rendered blockquote {
+  color: #9a9aa8;
+  border-left: 3px solid #343440;
+  padding: 0.1em 0 0.1em 1em;
+  margin-left: 0;
+}
+.md-rendered hr {
+  border: 0;
+  border-top: 1px solid #26262e;
+  margin: 1.3em 0;
+}
+.md-rendered table {
+  border-collapse: collapse;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.md-rendered th,
+.md-rendered td {
+  border: 1px solid #26262e;
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.md-rendered th {
+  background: #1b1b21;
+  font-weight: 600;
+  color: #ececf1;
+}
+.md-rendered img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
