@@ -124,6 +124,75 @@ body {
   }
 }
 
+/* ─── Syntax highlighting (highlight.js) ──────────────────────────────────────
+   A compact dark theme tuned to the app's near-black surfaces and iris accent.
+   The code font (JetBrains Mono) comes from `font-mono` on the <code> element. */
+.hljs {
+  color: #c8c8d4;
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: #6e7681;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type,
+.hljs-meta .hljs-keyword {
+  color: #a78bfa;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: #7ee787;
+}
+.hljs-number,
+.hljs-boolean {
+  color: #f0a878;
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section {
+  color: #d2a8ff;
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: #79c0ff;
+}
+.hljs-built_in,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #ffa657;
+}
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-tag {
+  color: #7ee787;
+}
+.hljs-property {
+  color: #79c0ff;
+}
+.hljs-meta,
+.hljs-doctag {
+  color: #6e7681;
+}
+.hljs-deletion {
+  color: #ffa198;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

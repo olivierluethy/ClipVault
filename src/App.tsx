@@ -32,6 +32,8 @@ import {
   saveTextItem,
 } from "./api";
 import { Card } from "./components/Card";
+import { CodeModal } from "./components/CodeModal";
+import { detectCode } from "./lib/codeDetect";
 import { ZoomModal } from "./components/ZoomModal";
 import { UndoToast } from "./components/UndoToast";
 import { Sidebar } from "./components/Sidebar";
@@ -66,6 +68,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [qrText, setQrText] = useState<string | null>(null);
   const [expandItem, setExpandItem] = useState<Item | null>(null);
+  const [codeItem, setCodeItem] = useState<Item | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [hotkey, setHotkey] = useState("Ctrl+Alt+V");
   const [draggingIds, setDraggingIds] = useState<string[] | null>(null);
@@ -281,6 +284,14 @@ export default function App() {
 
   const edit = useCallback((it: Item) => {
     if (["text", "link", "number", "color"].includes(it.item_type)) setEditingId(it.id);
+  }, []);
+
+  // "View full value" routes to the code detail view (syntax-highlighted, with
+  // Format for JSON/HTML/CSS) when the text is detected as code, else the plain
+  // text detail modal.
+  const expandText = useCallback((it: Item) => {
+    if (it.item_type === "text" && it.content && detectCode(it.content)) setCodeItem(it);
+    else setExpandItem(it);
   }, []);
 
   const saveEdit = useCallback(
@@ -868,7 +879,7 @@ export default function App() {
                   onZoom={() => setZoom(it)}
                   onQr={() => setQrText(it.content ?? "")}
                   onOpenLink={() => it.content && openUrl(it.content)}
-                  onExpandText={() => setExpandItem(it)}
+                  onExpandText={() => expandText(it)}
                   onStartEdit={() => setEditingId(it.id)}
                   onSaveEdit={(c) => saveEdit(it.id, c)}
                   onCancelEdit={() => setEditingId(null)}
@@ -974,7 +985,7 @@ export default function App() {
                         onZoom={() => setZoom(row.item)}
                         onQr={() => setQrText(row.item.content ?? "")}
                         onOpenLink={() => row.item.content && openUrl(row.item.content)}
-                        onExpandText={() => setExpandItem(row.item)}
+                        onExpandText={() => expandText(row.item)}
                         onStartEdit={() => setEditingId(row.item.id)}
                         onSaveEdit={(c) => saveEdit(row.item.id, c)}
                         onCancelEdit={() => setEditingId(null)}
@@ -1059,6 +1070,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <CodeModal item={codeItem} onClose={() => setCodeItem(null)} />
 
       <ZoomModal item={zoom} onClose={() => setZoom(null)} />
       <UndoToast
