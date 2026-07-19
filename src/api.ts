@@ -101,6 +101,9 @@ export const listItemsInFolder = (
     beforeId: beforeId ?? null,
   });
 export const search = (query: string, limit = 200) => invoke<Item[]>("search", { query, limit });
+/** Typo-tolerant fuzzy search (fzf-style ranking). "Gthb" still finds "Github". */
+export const fuzzySearch = (query: string, limit = 200) =>
+  invoke<Item[]>("fuzzy_search", { query, limit });
 
 // ─── Settings / maintenance / export / QR ──────────────────────────────────────
 

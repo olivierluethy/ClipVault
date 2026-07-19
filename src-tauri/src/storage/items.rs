@@ -78,6 +78,43 @@ pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     })
 }
 
+/// fzf-style subsequence score (both args lowercased by the caller). Returns `None`
+/// when `needle` isn't a subsequence of `haystack`; otherwise a score that rewards
+/// consecutive matches and word-boundary starts and penalizes gaps, so tighter,
+/// earlier matches rank higher.
+fn fuzzy_score(needle: &str, haystack: &str) -> Option<i64> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    let hay: Vec<char> = haystack.chars().collect();
+    let mut score: i64 = 0;
+    let mut hi: usize = 0;
+    let mut prev: Option<usize> = None;
+    for nc in needle.chars() {
+        let mut found = None;
+        while hi < hay.len() {
+            let c = hay[hi];
+            hi += 1;
+            if c == nc {
+                found = Some(hi - 1);
+                break;
+            }
+        }
+        let idx = found?;
+        score += 16;
+        match prev {
+            Some(p) if idx == p + 1 => score += 15, // consecutive
+            Some(p) => score -= ((idx - p - 1) as i64).min(10), // gap penalty
+            None => score -= (idx as i64).min(10), // prefer earlier first match
+        }
+        if idx == 0 || !hay[idx - 1].is_alphanumeric() {
+            score += 10; // word-boundary bonus
+        }
+        prev = Some(idx);
+    }
+    Some(score)
+}
+
 impl Storage {
     pub fn insert_or_bump(&self, item: NewItem, now: i64) -> rusqlite::Result<InsertOutcome> {
         let conn = self.conn.lock().unwrap();
@@ -363,6 +400,38 @@ impl Storage {
             [],
         )?;
         Ok(files)
+    }
+
+    /// Typo-tolerant fuzzy search: ranks live content-bearing items by an fzf-style
+    /// subsequence score against `query`, so "Gthb" still finds "Github". Scans the
+    /// most-recent items (capped) and returns the best `limit`. Complements FTS5
+    /// (`search`), which is exact-prefix.
+    pub fn fuzzy_search(&self, query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return Ok(vec![]);
+        }
+        let conn = self.conn.lock().unwrap();
+        // Cap the scan so a huge history can't make fuzzy search sluggish.
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL AND content IS NOT NULL
+             ORDER BY created_at DESC LIMIT 5000"
+        ))?;
+        let candidates: Vec<ItemDto> =
+            stmt.query_map([], map_item)?.collect::<rusqlite::Result<_>>()?;
+
+        let mut scored: Vec<(i64, ItemDto)> = candidates
+            .into_iter()
+            .filter_map(|it| {
+                let hay = it.content.as_deref().unwrap_or("").to_lowercase();
+                fuzzy_score(&needle, &hay).map(|s| (s, it))
+            })
+            .collect();
+        // Best score first; ties broken by recency.
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.created_at.cmp(&a.1.created_at)));
+        scored.truncate(limit.max(0) as usize);
+        Ok(scored.into_iter().map(|(_, it)| it).collect())
     }
 
     /// Full-text search over item content via FTS5. Matches the whole query as a

@@ -245,6 +245,12 @@ pub fn search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<I
     state.storage.search(&query, limit).map_err(|e| e.to_string())
 }
 
+/// Typo-tolerant fuzzy search (fzf-style ranking) over item content.
+#[tauri::command]
+pub fn fuzzy_search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<ItemDto>, String> {
+    state.storage.fuzzy_search(&query, limit).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_privacy(state: State<AppState>) -> bool {
     state.privacy.load(Ordering::Relaxed)

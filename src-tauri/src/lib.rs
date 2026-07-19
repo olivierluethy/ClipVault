@@ -311,6 +311,7 @@ pub fn run() {
             crate::ipc::folders_for_item,
             crate::ipc::list_items_in_folder,
             crate::ipc::search,
+            crate::ipc::fuzzy_search,
             crate::ipc::get_privacy,
             crate::ipc::set_privacy,
             crate::ipc::get_exclude_secrets,

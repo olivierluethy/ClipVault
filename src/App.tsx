@@ -24,6 +24,7 @@ import {
   unassignItem,
   foldersForItem,
   search,
+  fuzzySearch,
   getSettingStr,
   setSettingStr,
   openUrl,
@@ -77,6 +78,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Item[]>([]);
+  const [fuzzy, setFuzzy] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState<Item | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -159,8 +161,8 @@ export default function App() {
       setSearchResults([]);
       return;
     }
-    setSearchResults(await search(q));
-  }, [debouncedQuery]);
+    setSearchResults(await (fuzzy ? fuzzySearch(q) : search(q)));
+  }, [debouncedQuery, fuzzy]);
 
   useEffect(() => {
     runSearch();
@@ -765,9 +767,21 @@ export default function App() {
                   clearSearch();
                 }
               }}
-              placeholder="Search clipboard…"
-              className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-3 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+              placeholder={fuzzy ? "Fuzzy search…" : "Search clipboard…"}
+              className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-16 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
             />
+            <button
+              onClick={() => setFuzzy((v) => !v)}
+              aria-pressed={fuzzy}
+              title={fuzzy ? "Fuzzy matching on (typo-tolerant)" : "Fuzzy matching off (exact)"}
+              className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors ${
+                fuzzy
+                  ? "bg-accent/15 text-accent"
+                  : "text-fg-faint hover:bg-bg-hover hover:text-fg-muted"
+              }`}
+            >
+              ~fuzzy
+            </button>
           </div>
           {!linkGrouping && (
             <DateNavMenu
