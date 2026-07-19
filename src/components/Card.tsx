@@ -15,6 +15,7 @@ import {
   CleanIcon,
   TextIcon,
   CheckIcon,
+  RepeatIcon,
 } from "./Icon";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
@@ -407,7 +408,18 @@ export function Card(props: {
       <div className="card-actions-zone relative h-7 shrink-0">
         <div className="card-meta absolute inset-y-0 right-0 flex items-center gap-2.5 pr-1 font-mono text-[11px] text-fg-faint transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 tnum">
           <span title="Time captured">{timeLabel(item.created_at)}</span>
-          {item.copy_count > 1 && <span title={`Copied ${item.copy_count} times`}>×{item.copy_count}</span>}
+          {/* Copy-count: a repeat icon + "N×" pill so it reads as "copied N times"
+              rather than a cryptic ×N. Hidden at 1 (the default carries no info). */}
+          {item.copy_count > 1 && (
+            <span
+              title={`Copied ${item.copy_count} times`}
+              aria-label={`Copied ${item.copy_count} times`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-bg-hover/70 py-[1.5px] pl-1.5 pr-2 text-fg-muted"
+            >
+              <RepeatIcon className="h-3 w-3 text-fg-faint" />
+              <span className="tnum leading-none">{item.copy_count}×</span>
+            </span>
+          )}
           {item.pinned && <PinIcon className="h-3.5 w-3.5 text-accent" />}
         </div>
         <div className="card-actions pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">

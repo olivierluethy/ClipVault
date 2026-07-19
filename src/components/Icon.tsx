@@ -198,6 +198,16 @@ export const FlameIcon = (p: IconProps) => (
   </Svg>
 );
 
+// Two chasing arrows — reads as "captured again", used by the copy-count badge.
+export const RepeatIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M17 2.5 20.5 6 17 9.5" />
+    <path d="M3.5 11V9.5a3.5 3.5 0 0 1 3.5-3.5h13.5" />
+    <path d="M7 21.5 3.5 18 7 14.5" />
+    <path d="M20.5 13v1.5a3.5 3.5 0 0 1-3.5 3.5H3.5" />
+  </Svg>
+);
+
 export const SwatchIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="9" cy="9" r="3" />
