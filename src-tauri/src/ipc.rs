@@ -123,6 +123,8 @@ fn build_write_request(
 pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
     let (ty, content, file_path, hash) = state.storage.get_item(&id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
+    // Deliberate reuse from within ClipVault → the one honest usage signal we can observe.
+    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
     // Suppress the echo BEFORE writing, so the watcher thread ignores our own copy-back.
     *state.last_self_copy.lock().unwrap() = Some(hash);
     // Content-based items (text/link/number/color) have no file and are written as
@@ -141,6 +143,8 @@ pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
 pub fn copy_item_clean(state: State<AppState>, id: String) -> Result<(), String> {
     let (ty, content, file_path, _hash) = state.storage.get_item(&id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
+    // Clean copy is still a deliberate reuse from within ClipVault.
+    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
     let req = build_write_request(&ty, content, file_path, |s| crate::cleantext::clean_text(&s))?;
     write_and_mark(&state, req)
 }
@@ -153,6 +157,8 @@ pub fn copy_item_clean(state: State<AppState>, id: String) -> Result<(), String>
 pub fn copy_item_plain(state: State<AppState>, id: String) -> Result<(), String> {
     let (ty, content, file_path, hash) = state.storage.get_item(&id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
+    // "Copy as plain text" is still a deliberate reuse from within ClipVault.
+    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
     *state.last_self_copy.lock().unwrap() = Some(hash);
     let req = build_write_request(&ty, content, file_path, |s| s)?;
     state.writer.send(req).map_err(|e| e.to_string())

@@ -49,7 +49,14 @@ pub struct ItemDto {
     pub content: Option<String>,
     pub file_path: Option<String>,
     pub preview_path: Option<String>,
+    /// Passive dedup bookkeeping: how many times identical content was *captured*
+    /// (bumped on re-capture). Kept for recency collapse; NOT shown as the usage count.
     pub copy_count: i64,
+    /// Deliberate reuse from within ClipVault: incremented only when the user re-copies
+    /// this item (Copy button / row click). This is the honest "I needed this again"
+    /// signal — pastes into other apps are unobservable and never counted. Powers the
+    /// "Used N×" badge and the Frequent ranking.
+    pub reuse_count: i64,
     pub pinned: bool,
     pub created_at: i64,
     pub updated_at: i64,
@@ -60,14 +67,14 @@ pub struct ItemDto {
 }
 
 pub(crate) const ITEM_COLS: &str =
-    "id, type, content, file_path, preview_path, copy_count, pinned, created_at, updated_at, metadata";
+    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata";
 
 pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
         id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?, file_path: r.get(3)?,
-        preview_path: r.get(4)?, copy_count: r.get(5)?,
-        pinned: r.get::<_, i64>(6)? != 0, created_at: r.get(7)?, updated_at: r.get(8)?,
-        metadata: r.get(9)?,
+        preview_path: r.get(4)?, copy_count: r.get(5)?, reuse_count: r.get(6)?,
+        pinned: r.get::<_, i64>(7)? != 0, created_at: r.get(8)?, updated_at: r.get(9)?,
+        metadata: r.get(10)?,
     })
 }
 
@@ -197,16 +204,28 @@ impl Storage {
         Ok(rows)
     }
 
-    /// Items copied more than once, ranked by how often (`copy_count` desc), then by
-    /// most recently copied (`updated_at` desc, `id` desc to break exact ties). Powers
-    /// the "Frequent" smart view. Ranking is over the whole live history; the result is
-    /// capped at `limit` (top-N) rather than cursor-paginated.
+    /// Record a deliberate reuse of an item from within ClipVault (Copy button / row
+    /// click). Bumps only `reuse_count` — never `copy_count`, `created_at`, or
+    /// `updated_at` — so the honest usage count rises without reshuffling the timeline.
+    pub fn increment_reuse(&self, id: &str) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET reuse_count = reuse_count + 1 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    /// Items the user has actually reused from ClipVault (`reuse_count >= 1`), ranked by
+    /// how often (`reuse_count` desc), then most recently touched (`updated_at` desc,
+    /// `id` desc to break exact ties). Powers the "Frequent" smart view. Ranking is over
+    /// the whole live history; the result is capped at `limit` (top-N), not paginated.
     pub fn list_frequent(&self, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND copy_count >= 2
-             ORDER BY copy_count DESC, updated_at DESC, id DESC
+             WHERE deleted_at IS NULL AND reuse_count >= 1
+             ORDER BY reuse_count DESC, updated_at DESC, id DESC
              LIMIT ?1"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -216,12 +235,12 @@ impl Storage {
         Ok(rows)
     }
 
-    /// How many live items qualify for the "Frequent" view (`copy_count >= 2`).
+    /// How many live items qualify for the "Frequent" view (`reuse_count >= 1`).
     /// Drives the sidebar count next to that view; independent of the top-N cap.
     pub fn frequent_count(&self) -> rusqlite::Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
-            "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND copy_count >= 2",
+            "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND reuse_count >= 1",
             [],
             |r| r.get(0),
         )
@@ -458,40 +477,68 @@ mod tests {
     }
 
     #[test]
-    fn list_frequent_ranks_by_count_and_excludes_singles() {
+    fn reuse_count_only_bumps_on_deliberate_reuse_not_capture() {
         let (_d, s) = storage();
         let mk = |c: &str, h: &str| NewItem {
             item_type: ItemType::Text, content: Some(c.into()),
             file_path: None, preview_path: None, content_hash: h.into(),
         };
-        // "once" copied a single time → excluded. "twice"/"thrice" qualify (>= 2).
+        // Capture the same content twice (passive dedup): copy_count rises, reuse stays 0.
+        s.insert_or_bump(mk("captured-twice", "h1"), 100).unwrap();
+        s.insert_or_bump(mk("captured-twice", "h1"), 200).unwrap();
+        let row = s.list_items(10, None, None).unwrap()
+            .into_iter().find(|i| i.content.as_deref() == Some("captured-twice")).unwrap();
+        assert_eq!(row.copy_count, 2, "capture dedup still bumps copy_count");
+        assert_eq!(row.reuse_count, 0, "passive capture must NOT count as reuse");
+        // A never-reused item never appears in Frequent, regardless of copy_count.
+        assert_eq!(s.list_frequent(100).unwrap().len(), 0);
+        assert_eq!(s.frequent_count().unwrap(), 0);
+
+        // Deliberate reuse bumps reuse_count only (not copy_count / timestamps).
+        s.increment_reuse(&row.id).unwrap();
+        let row2 = s.list_items(10, None, None).unwrap()
+            .into_iter().find(|i| i.id == row.id).unwrap();
+        assert_eq!(row2.reuse_count, 1);
+        assert_eq!(row2.copy_count, 2, "reuse must not touch copy_count");
+        assert_eq!(row2.updated_at, row.updated_at, "reuse must not touch updated_at");
+        assert_eq!(s.frequent_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn list_frequent_ranks_by_reuse_and_excludes_unused() {
+        let (_d, s) = storage();
+        let mk = |c: &str, h: &str| NewItem {
+            item_type: ItemType::Text, content: Some(c.into()),
+            file_path: None, preview_path: None, content_hash: h.into(),
+        };
+        let id = |c: &str| s.list_items(50, None, None).unwrap()
+            .into_iter().find(|i| i.content.as_deref() == Some(c)).unwrap().id;
+        // "unused" is captured but never reused → excluded. Others reused N times.
+        s.insert_or_bump(mk("unused", "h0"), 100).unwrap();
         s.insert_or_bump(mk("once", "h1"), 100).unwrap();
-        s.insert_or_bump(mk("twice", "h2"), 100).unwrap();
-        s.insert_or_bump(mk("twice", "h2"), 200).unwrap(); // count 2
-        s.insert_or_bump(mk("thrice", "h3"), 100).unwrap();
-        s.insert_or_bump(mk("thrice", "h3"), 200).unwrap();
-        s.insert_or_bump(mk("thrice", "h3"), 300).unwrap(); // count 3
+        s.insert_or_bump(mk("twice", "h2"), 200).unwrap();
+        s.insert_or_bump(mk("thrice", "h3"), 300).unwrap();
+        s.increment_reuse(&id("once")).unwrap();
+        for _ in 0..2 { s.increment_reuse(&id("twice")).unwrap(); }
+        for _ in 0..3 { s.increment_reuse(&id("thrice")).unwrap(); }
 
         let rows = s.list_frequent(100).unwrap();
-        // most-copied first, single-copy item absent
         assert_eq!(
             rows.iter().map(|i| i.content.clone().unwrap()).collect::<Vec<_>>(),
-            vec!["thrice", "twice"]
+            vec!["thrice", "twice", "once"] // most-reused first, "unused" absent
         );
-        assert_eq!(s.frequent_count().unwrap(), 2);
+        assert_eq!(s.frequent_count().unwrap(), 3);
 
-        // Tie on copy_count → more recently copied (updated_at) wins.
+        // Tie on reuse_count → more recently touched (updated_at) wins.
         s.insert_or_bump(mk("tie-old", "h4"), 400).unwrap();
-        s.insert_or_bump(mk("tie-old", "h4"), 500).unwrap(); // count 2, updated 500
-        s.insert_or_bump(mk("tie-new", "h5"), 600).unwrap();
-        s.insert_or_bump(mk("tie-new", "h5"), 700).unwrap(); // count 2, updated 700
-        let rows = s.list_frequent(100).unwrap();
-        let twos: Vec<String> = rows
-            .iter()
-            .filter(|i| i.copy_count == 2)
-            .map(|i| i.content.clone().unwrap())
+        s.insert_or_bump(mk("tie-new", "h5"), 700).unwrap();
+        s.increment_reuse(&id("tie-old")).unwrap();
+        s.increment_reuse(&id("tie-new")).unwrap();
+        let ones: Vec<String> = s.list_frequent(100).unwrap().into_iter()
+            .filter(|i| i.reuse_count == 1)
+            .map(|i| i.content.unwrap())
             .collect();
-        assert_eq!(twos, vec!["tie-new", "tie-old", "twice"]);
+        assert_eq!(ones, vec!["tie-new", "tie-old", "once"]);
     }
 
     #[test]

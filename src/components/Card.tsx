@@ -408,16 +408,17 @@ export function Card(props: {
       <div className="card-actions-zone relative h-7 shrink-0">
         <div className="card-meta absolute inset-y-0 right-0 flex items-center gap-2.5 pr-1 font-mono text-[11px] text-fg-faint transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 tnum">
           <span title="Time captured">{timeLabel(item.created_at)}</span>
-          {/* Copy-count: a repeat icon + "N×" pill so it reads as "copied N times"
-              rather than a cryptic ×N. Hidden at 1 (the default carries no info). */}
-          {item.copy_count > 1 && (
+          {/* Reuse count: how many times the user re-copied this FROM ClipVault — the only
+              honest usage signal (pastes into other apps are unobservable, so we never
+              imply them). Hidden until reused at least once, since 0 carries no info. */}
+          {item.reuse_count >= 1 && (
             <span
-              title={`Copied ${item.copy_count} times`}
-              aria-label={`Copied ${item.copy_count} times`}
+              title={`You've reused this ${item.reuse_count} ${item.reuse_count === 1 ? "time" : "times"} from ClipVault`}
+              aria-label={`Used ${item.reuse_count} ${item.reuse_count === 1 ? "time" : "times"}`}
               className="inline-flex shrink-0 items-center gap-1 rounded-full bg-bg-hover/70 py-[1.5px] pl-1.5 pr-2 text-fg-muted"
             >
               <RepeatIcon className="h-3 w-3 text-fg-faint" />
-              <span className="tnum leading-none">{item.copy_count}×</span>
+              <span className="tnum leading-none">Used {item.reuse_count}×</span>
             </span>
           )}
           {item.pinned && <PinIcon className="h-3.5 w-3.5 text-accent" />}

@@ -167,6 +167,21 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 7", [])?;
         version = 7;
     }
+    if version < 8 {
+        // Deliberate-reuse counter (Task): distinct from copy_count (which counts passive
+        // capture dedups). Starts at 0 for every existing and new item; only a reuse from
+        // within ClipVault bumps it. Backfilling from copy_count would be wrong — those
+        // are accidental captures, not reuses — so all history starts fresh at 0.
+        let existing: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('items')")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        if !existing.iter().any(|c| c == "reuse_count") {
+            conn.execute("ALTER TABLE items ADD COLUMN reuse_count INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        conn.execute("PRAGMA user_version = 8", [])?;
+        version = 8;
+    }
     let _ = version;
     Ok(())
 }
@@ -329,21 +344,21 @@ mod tests {
         {
             let conn = s.conn.lock().unwrap();
             let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(v, 7);
+            assert_eq!(v, 8);
             let cols: Vec<String> = conn
                 .prepare("SELECT name FROM pragma_table_info('items')").unwrap()
                 .query_map([], |r| r.get::<_, String>(0)).unwrap()
                 .map(|r| r.unwrap()).collect();
-            for c in ["pinned", "preview_path", "deleted_at", "metadata"] {
+            for c in ["pinned", "preview_path", "deleted_at", "metadata", "reuse_count"] {
                 assert!(cols.contains(&c.to_string()), "missing column {c}");
             }
         }
-        // Reopen: must not error (idempotent) and stay at v6.
+        // Reopen: must not error (idempotent) and stay at the latest version.
         drop(s);
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()
             .query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 7);
+        assert_eq!(v, 8);
     }
 
     #[test]

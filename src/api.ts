@@ -8,7 +8,11 @@ export type Item = {
   content: string | null;
   file_path: string | null;
   preview_path: string | null;
+  /** Passive capture-dedup bookkeeping. Not shown as the usage count — see reuse_count. */
   copy_count: number;
+  /** Times the user deliberately reused this item from within ClipVault (Copy/row click).
+   *  The honest "used" signal; drives the "Used N×" badge and Frequent ranking. */
+  reuse_count: number;
   pinned: boolean;
   created_at: number;
   updated_at: number;

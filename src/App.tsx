@@ -232,23 +232,35 @@ export default function App() {
     [folder, reloadFolders, reloadCounts, reload]
   );
 
+  // A deliberate reuse (Copy / row-click) bumped the item's reuse_count in the DB —
+  // refresh so the "Used N×" badge, the sidebar Frequent count, and the Frequent
+  // ranking reflect it. Copy leaves created_at untouched, so the timeline never jumps.
+  const refreshAfterReuse = useCallback(() => {
+    reload();
+    reloadCounts();
+    if (isSearching) runSearch();
+  }, [reload, reloadCounts, isSearching, runSearch]);
+
   const copy = useCallback(async (it: Item) => {
     await copyItem(it.id);
     setCopied(it.id);
     setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
-  }, []);
+    refreshAfterReuse();
+  }, [refreshAfterReuse]);
 
   const cleanCopy = useCallback(async (it: Item) => {
     await copyItemClean(it.id);
     setCopied(it.id);
     setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
-  }, []);
+    refreshAfterReuse();
+  }, [refreshAfterReuse]);
 
   const plainCopy = useCallback(async (it: Item) => {
     await copyItemPlain(it.id);
     setCopied(it.id);
     setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
-  }, []);
+    refreshAfterReuse();
+  }, [refreshAfterReuse]);
 
   const del = useCallback(
     async (it: Item) => {
@@ -578,9 +590,10 @@ export default function App() {
   const copyAndHide = useCallback(
     async (it: Item) => {
       await copyItem(it.id);
+      refreshAfterReuse();
       await hideWindow();
     },
-    []
+    [refreshAfterReuse]
   );
 
   const { sel, setSel } = useKeyboardNav(flatItems, {
@@ -846,10 +859,10 @@ export default function App() {
                 <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full border border-border bg-bg-card text-accent">
                   <FlameIcon className="h-6 w-6" />
                 </div>
-                <h2 className="text-sm font-medium text-fg">No frequent items yet</h2>
+                <h2 className="text-sm font-medium text-fg">Nothing reused yet</h2>
                 <p className="mt-1.5 text-sm text-fg-muted">
-                  Anything you copy more than once shows up here, ranked by how often you
-                  reach for it. Keep going — your go-to snippets will rise to the top.
+                  Items show up here once you reuse them from ClipVault, ranked by how
+                  often. Copy something from your history again and it'll appear.
                 </p>
               </div>
             ) : (
