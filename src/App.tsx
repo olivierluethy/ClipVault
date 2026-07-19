@@ -4,7 +4,6 @@ import {
   Item,
   copyItem,
   copyItemClean,
-  copyItemPlain,
   deleteItem,
   restoreItem,
   setPinned,
@@ -255,13 +254,6 @@ export default function App() {
 
   const cleanCopy = useCallback(async (it: Item) => {
     await copyItemClean(it.id);
-    setCopied(it.id);
-    setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
-    refreshAfterReuse();
-  }, [refreshAfterReuse]);
-
-  const plainCopy = useCallback(async (it: Item) => {
-    await copyItemPlain(it.id);
     setCopied(it.id);
     setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
     refreshAfterReuse();
@@ -871,10 +863,6 @@ export default function App() {
                     setSel(i);
                     cleanCopy(it);
                   }}
-                  onPlainCopy={() => {
-                    setSel(i);
-                    plainCopy(it);
-                  }}
                   onDelete={() => del(it)}
                   onPin={() => pin(it)}
                   onZoom={() => setZoom(it)}
@@ -981,7 +969,6 @@ export default function App() {
                         dragging={!!draggingIds && draggingIds.includes(row.item.id)}
                         onCopy={() => copy(row.item)}
                         onCleanCopy={() => cleanCopy(row.item)}
-                        onPlainCopy={() => plainCopy(row.item)}
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
                         onZoom={() => setZoom(row.item)}

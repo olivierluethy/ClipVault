@@ -2,6 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { FolderDto, Item } from "../api";
 import { Popover, MenuItem } from "./Popover";
+import { TransformMenu } from "./TransformMenu";
 import {
   CopyIcon,
   PinIcon,
@@ -12,8 +13,7 @@ import {
   QrIcon,
   ExternalLinkIcon,
   MoreIcon,
-  CleanIcon,
-  TextIcon,
+  WandIcon,
   CheckIcon,
   RepeatIcon,
 } from "./Icon";
@@ -259,7 +259,6 @@ export function Card(props: {
   onCheckboxPointerEnter?: (e: React.PointerEvent) => void;
   onCopy: () => void;
   onCleanCopy: () => void;
-  onPlainCopy: () => void;
   onDelete: () => void;
   onPin: () => void;
   onZoom: () => void;
@@ -287,6 +286,7 @@ export function Card(props: {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [transformMenuOpen, setTransformMenuOpen] = useState(false);
   const folderBtnRef = useRef<HTMLButtonElement>(null);
   const moreBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -515,13 +515,14 @@ export function Card(props: {
           </MenuItem>
         )}
         {contentBased && (
-          <MenuItem icon={<CleanIcon className="h-4 w-4" />} onClick={() => { props.onCleanCopy(); setMoreMenuOpen(false); }}>
-            Clean copy
-          </MenuItem>
-        )}
-        {contentBased && (
-          <MenuItem icon={<TextIcon className="h-4 w-4" />} onClick={() => { props.onPlainCopy(); setMoreMenuOpen(false); }}>
-            Copy as plain text
+          <MenuItem
+            icon={<WandIcon className="h-4 w-4" />}
+            onClick={() => {
+              setMoreMenuOpen(false);
+              setTransformMenuOpen(true);
+            }}
+          >
+            Transform…
           </MenuItem>
         )}
         {canViewFull && (
@@ -541,6 +542,16 @@ export function Card(props: {
           Delete
         </MenuItem>
       </Popover>
+
+      {contentBased && (
+        <TransformMenu
+          anchorEl={moreBtnRef.current}
+          open={transformMenuOpen}
+          onClose={() => setTransformMenuOpen(false)}
+          content={item.content ?? ""}
+          onCleanCopy={props.onCleanCopy}
+        />
+      )}
     </div>
   );
 }

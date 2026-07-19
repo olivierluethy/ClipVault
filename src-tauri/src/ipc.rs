@@ -149,21 +149,6 @@ pub fn copy_item_clean(state: State<AppState>, id: String) -> Result<(), String>
     write_and_mark(&state, req)
 }
 
-/// Like `copy_item`, but explicitly copies the item as plain UTF8_STRING text (for
-/// "paste as plain text"). All stored content is already plain text, so for
-/// content-based items this writes the same bytes as `copy_item`; image/gif items are
-/// copied unmodified, same as `copy_item`.
-#[tauri::command]
-pub fn copy_item_plain(state: State<AppState>, id: String) -> Result<(), String> {
-    let (ty, content, file_path, hash) = state.storage.get_item(&id)
-        .map_err(|e| e.to_string())?.ok_or("item not found")?;
-    // "Copy as plain text" is still a deliberate reuse from within ClipVault.
-    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
-    *state.last_self_copy.lock().unwrap() = Some(hash);
-    let req = build_write_request(&ty, content, file_path, |s| s)?;
-    state.writer.send(req).map_err(|e| e.to_string())
-}
-
 /// Write arbitrary UTF-8 `text` to the system clipboard, suppressing the echo so the
 /// watcher does not re-capture it as a new history item. Used by the per-item
 /// Transform actions (case conversions, strip-to-plain-text) and code Format, whose

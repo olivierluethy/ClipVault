@@ -1,11 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { TransformMenu } from "./TransformMenu";
+import { WandIcon } from "./Icon";
 
-/** Full-screen "show more" view for a long text/link/number entry, with a copy button. */
+/** Full-screen "show more" view for a long text/link/number entry, with a copy button
+ *  and the non-destructive Transform actions (case conversions, strip to plain text). */
 export function TextModal(props: {
   text: string | null;
   onClose: () => void;
   onCopy: (text: string) => void;
 }) {
+  const [transformOpen, setTransformOpen] = useState(false);
+  const transformBtnRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") props.onClose();
@@ -30,6 +36,14 @@ export function TextModal(props: {
         </pre>
         <div className="flex justify-end gap-2">
           <button
+            ref={transformBtnRef}
+            onClick={() => setTransformOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded border border-border px-3 py-1 text-sm text-fg-muted hover:border-accent hover:text-fg"
+          >
+            <WandIcon className="h-4 w-4" />
+            Transform
+          </button>
+          <button
             onClick={() => props.onCopy(props.text!)}
             className="rounded border border-accent bg-accent-dim/40 px-3 py-1 text-sm text-fg hover:bg-accent-dim"
           >
@@ -43,6 +57,12 @@ export function TextModal(props: {
           </button>
         </div>
       </div>
+      <TransformMenu
+        anchorEl={transformBtnRef.current}
+        open={transformOpen}
+        onClose={() => setTransformOpen(false)}
+        content={props.text}
+      />
     </div>
   );
 }

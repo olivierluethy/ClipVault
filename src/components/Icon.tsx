@@ -208,6 +208,21 @@ export const RepeatIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A magic wand with a sparkle — marks the non-destructive "Transform" text actions.
+export const WandIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M15 4V2M15 10V8M18 7h2M10 7h2" />
+    <path d="M4.5 19.5 16 8l-.5-.5L4 19l.5.5ZM13.5 6 18 10.5" />
+  </Svg>
+);
+
+// A chevron pair '</>' — marks code-detail / "view as code".
+export const CodeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 8l-4 4 4 4M16 8l4 4-4 4" />
+  </Svg>
+);
+
 export const SwatchIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="9" cy="9" r="3" />

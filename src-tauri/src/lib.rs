@@ -300,7 +300,6 @@ pub fn run() {
             crate::ipc::update_content,
             crate::ipc::copy_item,
             crate::ipc::copy_item_clean,
-            crate::ipc::copy_item_plain,
             crate::ipc::copy_text,
             crate::ipc::save_text_item,
             crate::ipc::create_folder,
