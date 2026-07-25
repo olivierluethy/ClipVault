@@ -370,7 +370,8 @@ mod tests {
         {
             let conn = s.conn.lock().unwrap();
             let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-            assert_eq!(v, 8);
+            // Latest schema version — bump alongside every new migration step.
+            assert_eq!(v, 10);
             let cols: Vec<String> = conn
                 .prepare("SELECT name FROM pragma_table_info('items')").unwrap()
                 .query_map([], |r| r.get::<_, String>(0)).unwrap()
@@ -384,7 +385,7 @@ mod tests {
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()
             .query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 8);
+        assert_eq!(v, 10);
     }
 
     #[test]

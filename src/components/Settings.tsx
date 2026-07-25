@@ -250,6 +250,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
           <Section title="Startup">
             <Toggle
               label="Launch ClipVault at login"
+              hint={`Starts hidden in the tray so nothing is missed — open it from the tray icon or with ${hotkey}. Turn this off and ClipVault only records while you run it yourself.`}
               checked={autostart}
               onChange={(v) => {
                 setAuto(v);

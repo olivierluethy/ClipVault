@@ -340,17 +340,27 @@ pub fn set_setting_str(state: State<AppState>, key: String, value: String) -> Re
 
 // ─── Autostart ──────────────────────────────────────────────────────────────────
 
+/// The user's choice, not the current state of the desktop entry: the entry is
+/// re-created from this setting at every start (see `autostart::reconcile`), so the
+/// setting is the source of truth and a temporarily missing file mustn't show the
+/// toggle as off. Defaults to on — a clipboard manager that isn't running captures
+/// nothing.
 #[tauri::command]
-pub fn get_autostart(app: tauri::AppHandle) -> bool {
-    use tauri_plugin_autostart::ManagerExt;
-    app.autolaunch().is_enabled().unwrap_or(false)
+pub fn get_autostart(state: State<AppState>) -> bool {
+    state.storage.get_bool(crate::autostart::SETTING, true)
 }
 
 #[tauri::command]
-pub fn set_autostart(app: tauri::AppHandle, on: bool) -> Result<(), String> {
-    use tauri_plugin_autostart::ManagerExt;
-    let al = app.autolaunch();
-    if on { al.enable() } else { al.disable() }.map_err(|e| e.to_string())
+pub fn set_autostart(app: tauri::AppHandle, state: State<AppState>, on: bool) -> Result<(), String> {
+    if on {
+        crate::autostart::enable(&app)
+    } else {
+        crate::autostart::disable(&app)
+    }?;
+    state
+        .storage
+        .set_bool(crate::autostart::SETTING, on)
+        .map_err(|e| e.to_string())
 }
 
 // ─── Timed privacy ──────────────────────────────────────────────────────────────

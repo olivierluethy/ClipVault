@@ -1,4 +1,5 @@
 mod hashing;
+mod autostart;
 mod cleantext;
 pub mod cli;
 mod storage;
@@ -62,7 +63,9 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            // The login entry carries this flag so the app can start straight into
+            // the tray instead of throwing a window at the user right after login.
+            Some(vec![crate::autostart::AUTOSTART_ARG]),
         ))
         .plugin(
             // No fixed shortcut here: the actual hotkey is read from settings and
@@ -128,14 +131,10 @@ pub fn run() {
                 }
             }
 
-            // Enable autostart on first run only; respects a user's later choice to disable it.
-            {
-                use tauri_plugin_autostart::ManagerExt;
-                if storage.get_setting("autostart_initialized")?.is_none() {
-                    let _ = app.autolaunch().enable();
-                    storage.set_setting("autostart_initialized", "1")?;
-                }
-            }
+            // Keep the login autostart entry in sync with the setting on every start
+            // (default on), so a deleted or stale entry heals itself instead of
+            // silently leaving the user without a running clipboard manager.
+            crate::autostart::reconcile(&app.handle().clone(), &storage);
 
             // Spawn the clipboard watcher thread under a restart supervisor: if the X11
             // backend's run() loop returns (persistent failure, after its own internal
@@ -334,6 +333,17 @@ pub fn run() {
                 .build(app)?;
 
             app.manage(TrayState { tray, normal: normal_icon, privacy: privacy_icon });
+
+            // The window starts invisible (tauri.conf.json) so a login start never
+            // flashes it up: launched from the autostart entry ClipVault stays in the
+            // tray, reachable via the tray menu's Open or the global hotkey. Any other
+            // launch — launcher, terminal, second instance — shows it right away.
+            if !crate::autostart::launched_by_autostart() {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
 
             Ok(())
         })
