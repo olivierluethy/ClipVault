@@ -310,6 +310,20 @@ time; the v3 migration re-classifies items captured before this existed.
 box (visible as soon as there is a query) clears it and returns to the folder view, exactly
 like pressing `Esc`.
 
+Queries can carry filters, which work on their own or alongside words:
+
+| Filter | Example | Keeps |
+|---|---|---|
+| `type:` | `type:link` | One item type (`image` also matches GIFs) |
+| `app:` / `from:` | `app:code` | Entries copied from a matching app |
+| `is:` | `is:pinned`, `is:rich` | Pinned/unpinned, or entries that kept HTML |
+| `since:` / `after:` | `since:7d`, `since:2026-01-01` | Entries at or after that point |
+| `before:` / `until:` | `before:1d` | Entries older than that point |
+
+An unrecognised `word:value` stays part of the free text, so `http://x` and `TODO:` still
+search normally. The available filters are shown under the box while it is focused and
+empty.
+
 The `~fuzzy` toggle at the right of the box picks between two backends:
 
 | Mode | Command | Behaviour |
@@ -411,6 +425,8 @@ UI they're called via the typed wrappers in `src/api.ts`.
 | Key | Action |
 |---|---|
 | `Ctrl+Alt+V` | Summon / focus the window (global, works from anywhere) |
+| `Ctrl+Alt+Space` | Open the quick-paste palette (global) |
+| `Ctrl+Alt+B` | Paste the next entry down the clipboard stack (global) |
 | `Ctrl+F` | Focus the search box |
 | `↑` / `↓` | Move selection |
 | `Enter` | Copy selected item back to clipboard |

@@ -89,6 +89,39 @@ Tailwind + SQLite.
 - **Tunable.** A Strict / Balanced / Loose threshold in Settings decides how
   alike two entries have to be.
 
+## Speed & automation
+
+- **Quick-paste palette.** A small always-on-top window (`Ctrl+Alt+Space`) that
+  searches your history and pastes the pick straight into whatever window was in
+  front — the main window never opens. `↑↓` to choose, `Enter` to paste, `Alt+N`
+  to jump to a row, `Esc` to dismiss.
+- **Clipboard stack.** Copy several things, then press `Ctrl+Alt+B` repeatedly to
+  paste them back in order. The run resets when you copy something new or after
+  25 seconds idle.
+- **Snippets.** Templates you write rather than copy, with placeholders filled in
+  at paste time: `{{date}}`, `{{time}}`, `{{datetime}}`, `{{year}}`,
+  `{{clipboard}}`, `{{uuid}}` and `{{cursor}}`. Any captured entry can be promoted
+  to a snippet. Unknown placeholders are left alone.
+- **Type-aware actions.** The Transform menu opens with what fits the entry:
+  colours convert between hex / rgb() / hsl(), links drop their query string or
+  reduce to a domain, formatted numbers reduce to digits, file paths give the
+  filename, folder, or a shell-quoted list.
+
+## What gets captured
+
+- **Rich text preserved.** The `text/html` flavour is kept alongside the plain
+  text, so formatted content can be pasted back with its formatting intact
+  ("Copy with formatting"). Rows carrying one are marked **rich**.
+- **Files.** Copying files in the file manager is captured as a **Files** entry
+  holding the decoded paths, one per line.
+- **Source app recorded.** Each entry remembers which application it was copied
+  from (X11 only), shown on the row and searchable with `app:`.
+- **Per-app blocklist.** Never capture from named apps — a stronger guarantee
+  than secret detection, since it doesn't depend on the app marking its own
+  clipboard content.
+- **Capture rules.** Minimum and maximum length, plus ignore regexes for content
+  only you can recognise. A skipped entry says which rule rejected it.
+
 ## Search & navigation
 
 - **Full-text search.** Fast FTS5 search over item content (`Ctrl+F`), with
@@ -100,6 +133,10 @@ Tailwind + SQLite.
   by OCR is searched too.
 - **Clear the search.** An “X” inside the search box appears as soon as you type
   and resets back to the folder view (`Esc` does the same).
+- **Search filters.** Narrow a query with `type:link`, `app:code`, `is:pinned`,
+  `is:rich`, `since:7d` and `before:1d` (durations or `YYYY-MM-DD`). Filters work
+  on their own or alongside words; the available ones are shown when the box is
+  focused and empty.
 - **Date filter.** A calendar picker that highlights days containing items and
   filters the timeline to a chosen day/range.
 - **Date navigation rail.** A right-side chronological rail with scroll-spy that
@@ -163,6 +200,8 @@ Tailwind + SQLite.
 | Key | Action |
 |---|---|
 | `Ctrl+Alt+V` (configurable) | Summon / focus the window (global) |
+| `Ctrl+Alt+Space` (configurable) | Open the quick-paste palette (global) |
+| `Ctrl+Alt+B` (configurable) | Paste the next entry in sequence (global) |
 | `Ctrl+F` | Focus the search box |
 | `Ctrl+A` | Select all items in the current view |
 | `↑` / `↓` | Move selection |
