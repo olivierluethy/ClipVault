@@ -7,7 +7,7 @@ import {
   deleteItem,
   duplicateClusters,
 } from "../api";
-import { CheckIcon, CopyIcon, PinIcon, StackIcon, TrashIcon } from "./Icon";
+import { CheckIcon, PinIcon, ShieldIcon, StackIcon, TrashIcon } from "./Icon";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
@@ -295,7 +295,7 @@ export default function Duplicates(props: {
         </ul>
 
         <p className="mt-4 flex items-center gap-1.5 px-1 text-xs text-fg-faint">
-          <CopyIcon className="h-3.5 w-3.5 shrink-0" />
+          <ShieldIcon className="h-3.5 w-3.5 shrink-0" />
           Pinned entries are never removed. Removals can be undone right after.
         </p>
       </div>
