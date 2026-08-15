@@ -68,6 +68,28 @@ pub fn process_event(
     let now = chrono_now_millis();
 
     let new_item = match item_type {
+        ItemType::File => {
+            // Store the readable paths, not the raw file:// URI list — that is what the
+            // user recognises, what search should match, and what pasting back into a
+            // terminal should produce.
+            let raw = String::from_utf8_lossy(&ev.bytes).into_owned();
+            let paths = crate::classifier::parse_uri_list(&raw).join("\n");
+            if paths.is_empty() {
+                return Ok(Capture::Skipped("an empty file list".to_string()));
+            }
+            if let Some(rejection) = capture_rules::reject_text(storage, &paths) {
+                return Ok(Capture::Skipped(rejection.reason()));
+            }
+            NewItem {
+                item_type: ItemType::File,
+                content: Some(paths),
+                file_path: None,
+                preview_path: None,
+                content_hash: hash,
+                source_app: ev.source_app.clone(),
+                html: None,
+            }
+        }
         ItemType::Text | ItemType::Link | ItemType::Number | ItemType::Color => {
             let text = String::from_utf8_lossy(&ev.bytes).into_owned();
             // The user's own ignore rules get the last word on text entries.

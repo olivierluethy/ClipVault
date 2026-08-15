@@ -16,6 +16,11 @@ const IMAGE_MIMES: [&str; 3] = ["image/gif", "image/png", "image/jpeg"];
 /// be pasted back later.
 const HTML_MIME: &str = "text/html";
 
+/// File-manager copies. The payload is a newline-separated URI list; only one containing
+/// a `file://` entry is treated as a file copy, because some browsers also advertise this
+/// target for an ordinary link copied from the address bar.
+const URI_LIST_MIME: &str = "text/uri-list";
+
 /// Upper bound on a stored HTML flavour. A page's worth of markup is worth keeping; a
 /// whole document's is not, and the plain-text copy is never lost either way.
 const MAX_HTML: usize = 262_144; // 256 KB
@@ -135,8 +140,9 @@ impl ClipboardBackend for X11Backend {
         // _NET_ACTIVE_WINDOW — capture carries on without a source app.
         let active_window = crate::active_window::ActiveWindow::new();
 
-        // Rich-text sidecar target, interned once.
+        // Rich-text and file-list targets, interned once.
         let html_target = self.atom(HTML_MIME).ok();
+        let uri_list_target = self.atom(URI_LIST_MIME).ok();
 
         let mut consecutive_failures: u32 = 0;
 
@@ -197,6 +203,24 @@ impl ClipboardBackend for X11Backend {
             // Read the focused window now, while the app the user copied from is still
             // the active one. Cheap enough to do before knowing which branch we take.
             let source_app = active_window.as_ref().and_then(|a| a.class());
+
+            // A file-manager copy offers text/uri-list (and usually plain text as a
+            // fallback), so this has to be checked before the text branch claims the
+            // change. Only a list that actually references files counts — browsers
+            // advertise this target for a plain link too.
+            if let Some(atom) = uri_list_target {
+                if let Ok(bytes) =
+                    self.clipboard.load(selection, atom, property, Duration::from_millis(120))
+                {
+                    let raw = String::from_utf8_lossy(&bytes);
+                    if raw.lines().any(|l| l.trim_start().starts_with("file://")) {
+                        let mut ev = ClipEvent::new(URI_LIST_MIME.to_string(), bytes.to_vec());
+                        ev.source_app = source_app.clone();
+                        let _ = tx.send(ev);
+                        continue;
+                    }
+                }
+            }
 
             if !text.is_empty() {
                 // Phase-0 accepted trade-off: text wins when an owner offers BOTH

@@ -4,7 +4,7 @@ use super::levenshtein::{Matcher, MAX_HAYSTACK_CHARS};
 use super::Storage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum ItemType { Text, Image, Gif, Link, Number, Color }
+pub enum ItemType { Text, Image, Gif, Link, Number, Color, File }
 
 impl ItemType {
     pub fn as_str(&self) -> &'static str {
@@ -15,6 +15,7 @@ impl ItemType {
             ItemType::Link => "link",
             ItemType::Number => "number",
             ItemType::Color => "color",
+            ItemType::File => "file",
         }
     }
     // Paired with as_str(); used when reading typed items back in a later phase.
@@ -26,6 +27,7 @@ impl ItemType {
             "link" => ItemType::Link,
             "number" => ItemType::Number,
             "color" => ItemType::Color,
+            "file" => ItemType::File,
             _ => ItemType::Text,
         }
     }

@@ -6,9 +6,50 @@ pub fn classify(mime: &str, bytes: &[u8]) -> ItemType {
         ItemType::Gif
     } else if mime.starts_with("image/") {
         ItemType::Image
+    } else if mime == "text/uri-list" {
+        // A file-manager copy. The payload is a newline-separated list of file:// URIs,
+        // which is text, but treating it as text would bury real file references in the
+        // notes.
+        ItemType::File
     } else {
         ItemType::Text
     }
+}
+
+/// Turns a `text/uri-list` payload into readable paths, one per line: comment lines
+/// (leading `#`, per RFC 2483) are dropped and `file://` URIs are percent-decoded back
+/// into ordinary paths. Non-file URIs are kept verbatim.
+pub fn parse_uri_list(raw: &str) -> Vec<String> {
+    raw.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|line| match line.strip_prefix("file://") {
+            Some(path) => percent_decode(path),
+            None => line.to_string(),
+        })
+        .collect()
+}
+
+/// Minimal percent-decoder for the `file://` URIs a file manager puts on the clipboard.
+/// Invalid escapes are passed through rather than dropped, so a path is never silently
+/// mangled.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
+            if let Some(v) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 pub fn classify_text(content: &str) -> ItemType {
@@ -58,7 +99,7 @@ pub fn extension_for(item_type: ItemType, mime: &str) -> &'static str {
             "image/bmp" => "bmp",
             _ => "png",
         },
-        ItemType::Text | ItemType::Link | ItemType::Number | ItemType::Color => "txt",
+        ItemType::Text | ItemType::Link | ItemType::Number | ItemType::Color | ItemType::File => "txt",
     }
 }
 
@@ -77,7 +118,7 @@ mod tests {
     #[test]
     fn text_otherwise() {
         assert_eq!(classify("text/plain;charset=utf-8", b"hello"), ItemType::Text);
-        assert_eq!(classify("text/uri-list", b"https://x"), ItemType::Text);
+        assert_eq!(classify("text/uri-list", b"file:///tmp/x"), ItemType::File);
     }
 
     #[test]
