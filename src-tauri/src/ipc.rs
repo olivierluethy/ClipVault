@@ -1,7 +1,7 @@
 use tauri::{State, Emitter, Manager};
 use std::sync::atomic::Ordering;
 use crate::state::AppState;
-use crate::storage::{ItemDto, FolderDto};
+use crate::storage::{DuplicateCluster, ItemDto, FolderDto};
 use crate::clipboard_writer::WriteRequest;
 
 fn now_ms() -> i64 {
@@ -257,6 +257,29 @@ pub fn search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<I
 #[tauri::command]
 pub fn fuzzy_search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<ItemDto>, String> {
     state.storage.fuzzy_search(&query, limit).map_err(|e| e.to_string())
+}
+
+/// Clusters of identical / near-identical entries for the "Similar" view, largest first.
+#[tauri::command]
+pub fn duplicate_clusters(state: State<AppState>) -> Result<Vec<DuplicateCluster>, String> {
+    state.storage.duplicate_clusters().map_err(|e| e.to_string())
+}
+
+/// How many entries the "Similar" view would offer to remove. Drives the sidebar badge.
+#[tauri::command]
+pub fn duplicate_count(state: State<AppState>) -> Result<i64, String> {
+    state.storage.duplicate_count().map_err(|e| e.to_string())
+}
+
+/// The similarity threshold (0.5..=1.0) two entries must reach to be clustered.
+#[tauri::command]
+pub fn get_similarity_threshold(state: State<AppState>) -> f64 {
+    state.storage.similarity_threshold()
+}
+
+#[tauri::command]
+pub fn set_similarity_threshold(state: State<AppState>, value: f64) -> Result<(), String> {
+    state.storage.set_similarity_threshold(value).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
