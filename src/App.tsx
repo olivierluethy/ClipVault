@@ -17,6 +17,9 @@ import {
   frequentCount,
   duplicateCount,
   snippetCount,
+  copyItemHtml,
+  setSnippet,
+  onStackAdvanced,
   onItemAdded,
   FolderDto,
   listFolders,
@@ -125,6 +128,25 @@ export default function App() {
   const reloadDupCount = useCallback(async () => {
     setDupCount(await duplicateCount());
   }, []);
+
+  const quickMsgTimer = useRef<number | null>(null);
+  /** Show a brief message in the floating toast, replacing whatever was there. */
+  const flashMessage = useCallback((msg: string, ms = 1600) => {
+    setQuickMsg(msg);
+    if (quickMsgTimer.current) window.clearTimeout(quickMsgTimer.current);
+    quickMsgTimer.current = window.setTimeout(() => setQuickMsg(null), ms);
+  }, []);
+
+  // The clipboard stack pastes without the window being involved, so when the window IS
+  // open this is the only feedback that the shortcut did anything.
+  useEffect(() => {
+    const un = onStackAdvanced((step) => {
+      flashMessage(`Pasted ${step.position}/${step.total} · ${step.preview}`, 2200);
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [flashMessage]);
 
   const reloadSnippetCount = useCallback(async () => {
     setSnipCount(await snippetCount());
@@ -337,6 +359,26 @@ export default function App() {
     setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
     refreshAfterReuse();
   }, [refreshAfterReuse]);
+
+  /** Copy back using the stored text/html flavour, so a rich editor keeps the
+   *  formatting. Only offered when the entry actually kept one. */
+  const copyRich = useCallback(async (it: Item) => {
+    await copyItemHtml(it.id);
+    setCopied(it.id);
+    setTimeout(() => setCopied((c) => (c === it.id ? null : c)), 1200);
+    refreshAfterReuse();
+  }, [refreshAfterReuse]);
+
+  /** Promote a captured entry into the Snippets library, where it becomes an editable
+   *  template rather than a piece of history. */
+  const saveAsSnippet = useCallback(async (it: Item) => {
+    await setSnippet(it.id, true);
+    flashMessage("Saved to Snippets ✓");
+    reload();
+    reloadCounts();
+    reloadSnippetCount();
+    setSnipRefresh((n) => n + 1);
+  }, [reload, reloadCounts, reloadSnippetCount]);
 
   const del = useCallback(
     async (it: Item) => {
@@ -779,15 +821,12 @@ export default function App() {
     setPriv(next);
   };
 
-  const quickMsgTimer = useRef<number | null>(null);
   const doQuickAdd = useCallback(async () => {
     const added = await quickAdd();
     // A successful add refreshes the timeline via the `item-added` event listeners;
     // show a brief confirmation either way (esp. useful while privacy mode is on).
-    setQuickMsg(added ? "Added current clipboard ✓" : "Clipboard empty — nothing to add");
-    if (quickMsgTimer.current) window.clearTimeout(quickMsgTimer.current);
-    quickMsgTimer.current = window.setTimeout(() => setQuickMsg(null), 1600);
-  }, []);
+    flashMessage(added ? "Added current clipboard ✓" : "Clipboard empty — nothing to add");
+  }, [flashMessage]);
 
   const isEmpty = isSearching ? rows.length === 0 : rows.length === 0 && pinned.length === 0;
 
@@ -1025,6 +1064,8 @@ export default function App() {
                     setSel(i);
                     cleanCopy(it);
                   }}
+                  onCopyRich={() => copyRich(it)}
+                  onSaveAsSnippet={() => saveAsSnippet(it)}
                   onDelete={() => del(it)}
                   onPin={() => pin(it)}
                   onSetExpiry={(minutes) => setExpiry(it, minutes)}
@@ -1132,6 +1173,8 @@ export default function App() {
                         dragging={!!draggingIds && draggingIds.includes(row.item.id)}
                         onCopy={() => copy(row.item)}
                         onCleanCopy={() => cleanCopy(row.item)}
+                        onCopyRich={() => copyRich(row.item)}
+                        onSaveAsSnippet={() => saveAsSnippet(row.item)}
                         onDelete={() => del(row.item)}
                         onPin={() => pin(row.item)}
                         onSetExpiry={(minutes) => setExpiry(row.item, minutes)}

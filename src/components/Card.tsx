@@ -21,6 +21,8 @@ import {
   LockIcon,
   EyeOffIcon,
   ClockIcon,
+  SnippetIcon,
+  FileIcon,
 } from "./Icon";
 import { looksSecret } from "../lib/secret";
 
@@ -246,6 +248,29 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
       </span>
     );
   }
+  if (item.item_type === "file") {
+    const paths = (item.content ?? "").split("\n").filter(Boolean);
+    const first = paths[0] ?? "";
+    // The file name is what identifies the entry; the directory is context, so it is
+    // shown but never allowed to push the name out of view.
+    const slash = first.lastIndexOf("/");
+    const dir = slash > 0 ? first.slice(0, slash + 1) : "";
+    const name = slash > 0 ? first.slice(slash + 1) : first;
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <FileIcon className="h-4 w-4 shrink-0 text-fg-muted" />
+        <span className="flex min-w-0 flex-1 items-baseline gap-1 font-mono text-sm">
+          <span className="truncate text-fg-faint">{dir}</span>
+          <span className="shrink-0 truncate text-fg/90">{name}</span>
+        </span>
+        {paths.length > 1 && (
+          <span className="shrink-0 rounded-full bg-bg-hover/70 px-1.5 py-[1.5px] font-mono text-[10px] leading-none text-fg-muted tnum">
+            +{paths.length - 1}
+          </span>
+        )}
+      </span>
+    );
+  }
   if (item.item_type === "text" || item.item_type === "number") {
     if (secret) {
       return (
@@ -308,6 +333,10 @@ export function Card(props: {
   onCheckboxPointerEnter?: (e: React.PointerEvent) => void;
   onCopy: () => void;
   onCleanCopy: () => void;
+  /** Copy back with the stored text/html flavour, keeping the formatting. */
+  onCopyRich: () => void;
+  /** Move this entry into the Snippets library. */
+  onSaveAsSnippet: () => void;
   onDelete: () => void;
   onPin: () => void;
   onSetExpiry: (minutes: number | null) => void;
@@ -328,9 +357,13 @@ export function Card(props: {
     item.item_type === "text" ||
     item.item_type === "link" ||
     item.item_type === "number" ||
-    item.item_type === "color";
+    item.item_type === "color" ||
+    item.item_type === "file";
   const canViewFull =
-    (item.item_type === "text" || item.item_type === "number" || item.item_type === "link") &&
+    (item.item_type === "text" ||
+      item.item_type === "number" ||
+      item.item_type === "link" ||
+      item.item_type === "file") &&
     !!item.content;
   const [draft, setDraft] = useState(item.content ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -483,6 +516,24 @@ export function Card(props: {
               <span className="tnum leading-none">{remainingLabel(item.expires_at)}</span>
             </span>
           )}
+          {/* Kept formatting. Worth showing, because it changes what the Copy actions
+              can do — plain text or the original markup. */}
+          {item.html && (
+            <span
+              title="Copied with formatting — can be pasted back as rich text"
+              className="inline-flex shrink-0 items-center rounded-full bg-bg-hover/70 px-1.5 py-[1.5px] text-[10px] uppercase tracking-wider text-fg-muted leading-none"
+            >
+              rich
+            </span>
+          )}
+          {item.source_app && (
+            <span
+              title={`Copied from ${item.source_app}`}
+              className="card-action-extra max-w-[7rem] truncate text-fg-faint"
+            >
+              {item.source_app}
+            </span>
+          )}
           {item.pinned && <PinIcon className="h-3.5 w-3.5 text-accent" />}
         </div>
         <div className="card-actions pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
@@ -606,6 +657,28 @@ export function Card(props: {
         {contentBased && (
           <MenuItem icon={<QrIcon className="h-4 w-4" />} onClick={() => { props.onQr(); setMoreMenuOpen(false); }}>
             Show QR code
+          </MenuItem>
+        )}
+        {item.html && (
+          <MenuItem
+            icon={<CopyIcon className="h-4 w-4" />}
+            onClick={() => {
+              props.onCopyRich();
+              setMoreMenuOpen(false);
+            }}
+          >
+            Copy with formatting
+          </MenuItem>
+        )}
+        {contentBased && !item.is_snippet && (
+          <MenuItem
+            icon={<SnippetIcon className="h-4 w-4" />}
+            onClick={() => {
+              props.onSaveAsSnippet();
+              setMoreMenuOpen(false);
+            }}
+          >
+            Save as snippet
           </MenuItem>
         )}
         <MenuItem icon={<PinIcon className="h-4 w-4" />} onClick={() => { props.onPin(); setMoreMenuOpen(false); }}>
