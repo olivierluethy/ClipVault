@@ -8,6 +8,7 @@ import {
   ImageIcon,
   SwatchIcon,
   FlameIcon,
+  StackIcon,
   FolderIcon,
   FolderPlusIcon,
   EditIcon,
@@ -26,6 +27,8 @@ const SYSTEM: SysFolder[] = [
   { id: "all", label: "All", Icon: LayersIcon },
   // Smart view: ranked by how often each item was copied (not a type bucket).
   { id: "frequent", label: "Frequent", Icon: FlameIcon, title: "Most frequently copied" },
+  // Smart view: entries that duplicate one another, grouped for cleanup.
+  { id: "similar", label: "Similar", Icon: StackIcon, title: "Duplicate & near-duplicate entries" },
   { id: "text", label: "Text", Icon: TextIcon },
   { id: "link", label: "Links", Icon: ExternalLinkIcon },
   { id: "number", label: "Numbers", Icon: HashIcon },
@@ -181,6 +184,7 @@ function UserFolderRow({
 export function Sidebar({
   counts,
   frequentCount,
+  duplicateCount,
   selected,
   onSelect,
   folders,
@@ -195,6 +199,8 @@ export function Sidebar({
   counts: Record<string, number>;
   /** Count for the "Frequent" smart view; kept out of `counts` so "All" doesn't double it. */
   frequentCount: number;
+  /** Removable entries the "Similar" smart view found; likewise kept out of `counts`. */
+  duplicateCount: number;
   selected: string;
   onSelect: (id: string) => void;
   folders: FolderDto[];
@@ -254,7 +260,13 @@ export function Sidebar({
               key={f.id}
               selected={selected === f.id}
               onSelect={() => pick(f.id)}
-              count={f.id === "frequent" ? frequentCount : countFor(f.id, counts)}
+              count={
+                f.id === "frequent"
+                  ? frequentCount
+                  : f.id === "similar"
+                  ? duplicateCount
+                  : countFor(f.id, counts)
+              }
               title={f.title ?? f.label}
             >
               <Icon className={`h-4 w-4 shrink-0 ${selected === f.id ? "text-accent" : ""}`} />

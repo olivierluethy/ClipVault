@@ -106,9 +106,35 @@ export const listItemsInFolder = (
     beforeId: beforeId ?? null,
   });
 export const search = (query: string, limit = 200) => invoke<Item[]>("search", { query, limit });
-/** Typo-tolerant fuzzy search (fzf-style ranking). "Gthb" still finds "Github". */
+/** Typo-tolerant search ranked by Levenshtein distance. "Gtihub" still finds "Github". */
 export const fuzzySearch = (query: string, limit = 200) =>
   invoke<Item[]>("fuzzy_search", { query, limit });
+
+// ─── Duplicates ("Similar" view) ───────────────────────────────────────────────
+
+export type DuplicateMember = {
+  item: Item;
+  /** Closeness to the cluster's keeper, 0..1. Exactly 1 means identical. */
+  similarity: number;
+  /** Whether this entry may be removed — never true for the keeper or a pinned item. */
+  removable: boolean;
+};
+
+export type DuplicateCluster = {
+  id: string;
+  keeper_id: string;
+  /** Keeper first, then the rest closest-match-first. */
+  members: DuplicateMember[];
+};
+
+/** Clusters of identical / near-identical entries, largest cluster first. */
+export const duplicateClusters = () => invoke<DuplicateCluster[]>("duplicate_clusters");
+/** How many entries the Similar view would offer to remove (the sidebar badge). */
+export const duplicateCount = () => invoke<number>("duplicate_count");
+/** Similarity two entries must reach to be clustered (0.5–1). */
+export const getSimilarityThreshold = () => invoke<number>("get_similarity_threshold");
+export const setSimilarityThreshold = (value: number) =>
+  invoke<void>("set_similarity_threshold", { value });
 
 // ─── Settings / maintenance / export / QR ──────────────────────────────────────
 

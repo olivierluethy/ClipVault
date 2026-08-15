@@ -255,6 +255,14 @@ export const EyeOffIcon = (p: IconProps) => (
   </Svg>
 );
 
+// Two offset sheets — marks the "Similar" view, where entries come in stacks.
+export const StackIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2.5" />
+    <path d="M15.5 5.5A2.5 2.5 0 0 0 13 4H6.5A2.5 2.5 0 0 0 4 6.5V13a2.5 2.5 0 0 0 1.5 2.3" opacity="0.6" />
+  </Svg>
+);
+
 export const SwatchIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="9" cy="9" r="3" />

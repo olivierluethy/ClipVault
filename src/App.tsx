@@ -15,6 +15,7 @@ import {
   onPrivacyChanged,
   folderCounts,
   frequentCount,
+  duplicateCount,
   onItemAdded,
   FolderDto,
   listFolders,
@@ -54,6 +55,7 @@ import { ListHeader } from "./components/ListHeader";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon, XIcon } from "./components/Icon";
+import Duplicates from "./components/Duplicates";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
@@ -89,6 +91,10 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [freqCount, setFreqCount] = useState(0);
+  const [dupCount, setDupCount] = useState(0);
+  // Bumped to make the Similar view re-scan after something outside it changed the
+  // history (an undone removal, a capture).
+  const [dupRefresh, setDupRefresh] = useState(0);
   const [folders, setFolders] = useState<FolderDto[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const parentRef = useRef<HTMLDivElement>(null);
@@ -107,6 +113,13 @@ export default function App() {
 
   const reloadFolders = useCallback(async () => {
     setFolders(await listFolders());
+  }, []);
+
+  // Clustering scans the whole recent history, so — unlike the cheap folder counts — this
+  // is not run on every capture. It refreshes on open, after a removal, and on a slow
+  // timer while items keep arriving.
+  const reloadDupCount = useCallback(async () => {
+    setDupCount(await duplicateCount());
   }, []);
 
   useEffect(() => {
@@ -154,6 +167,20 @@ export default function App() {
       un.then((f) => f());
     };
   }, [reloadFolders]);
+
+  useEffect(() => {
+    reloadDupCount();
+    let timer: number | null = null;
+    const un = onItemAdded(() => {
+      // Coalesce a burst of captures into one scan.
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(reloadDupCount, 5000);
+    });
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      un.then((f) => f());
+    };
+  }, [reloadDupCount]);
 
   // Debounce the raw query into debouncedQuery so we don't hit the DB on every keystroke.
   useEffect(() => {
@@ -210,7 +237,20 @@ export default function App() {
     setSelectedIds(new Set());
     anchorIndexRef.current = null;
     setFolder(f);
+    if (f === "similar") setDupRefresh((n) => n + 1);
   }, [clearSearch]);
+
+  // Removals made inside the Similar view feed the app's standard undo toast, so a
+  // bulk cleanup stays recoverable.
+  const handleDuplicatesDeleted = useCallback(
+    (ids: string[]) => {
+      setPendingDeleteIds(ids);
+      reload();
+      reloadCounts();
+      reloadDupCount();
+    },
+    [reload, reloadCounts, reloadDupCount]
+  );
 
   // Applying a date range replaces the folder/search view with an all-types view of
   // that window (kept mutually exclusive to stay easy to reason about).
@@ -219,6 +259,10 @@ export default function App() {
     setFolder("all");
     setDateRange(r);
   }, [clearSearch]);
+
+  // The Similar view replaces the timeline entirely — it shows clusters, not a
+  // chronological list — so a search or a date filter takes precedence over it.
+  const isDuplicatesView = folder === "similar" && !isSearching && !dateRange;
 
   // The Links view can group by domain instead of by date.
   const linkGrouping = folder === "link" && groupByDomain && !isSearching && !dateRange;
@@ -750,6 +794,7 @@ export default function App() {
       <Sidebar
         counts={counts}
         frequentCount={freqCount}
+        duplicateCount={dupCount}
         selected={folder}
         onSelect={handleSelectFolder}
         folders={folders}
@@ -869,6 +914,10 @@ export default function App() {
           </button>
         </header>
 
+        {isDuplicatesView ? (
+          <Duplicates onDeleted={handleDuplicatesDeleted} refreshKey={dupRefresh} />
+        ) : (
+          <>
         {isSearching && (
           <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0 text-sm text-fg-muted">
             <span>
@@ -1102,6 +1151,8 @@ export default function App() {
             <DateRail entries={dateNav} topRowIndex={topRowIndex} onJump={scrollToHeaderIndex} />
           )}
         </div>
+          </>
+        )}
       </div>
 
       {quickMsg && (
@@ -1169,6 +1220,8 @@ export default function App() {
             setPendingDeleteIds(null);
             reload();
             reloadCounts();
+            reloadDupCount();
+            setDupRefresh((n) => n + 1);
           }
         }}
         onExpire={() => setPendingDeleteIds(null)}
