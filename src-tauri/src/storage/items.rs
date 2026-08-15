@@ -1,5 +1,6 @@
 use rusqlite::params;
 use uuid::Uuid;
+use super::levenshtein::{Matcher, MAX_HAYSTACK_CHARS};
 use super::Storage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -81,41 +82,14 @@ pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     })
 }
 
-/// fzf-style subsequence score (both args lowercased by the caller). Returns `None`
-/// when `needle` isn't a subsequence of `haystack`; otherwise a score that rewards
-/// consecutive matches and word-boundary starts and penalizes gaps, so tighter,
-/// earlier matches rank higher.
-fn fuzzy_score(needle: &str, haystack: &str) -> Option<i64> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    let hay: Vec<char> = haystack.chars().collect();
-    let mut score: i64 = 0;
-    let mut hi: usize = 0;
-    let mut prev: Option<usize> = None;
-    for nc in needle.chars() {
-        let mut found = None;
-        while hi < hay.len() {
-            let c = hay[hi];
-            hi += 1;
-            if c == nc {
-                found = Some(hi - 1);
-                break;
-            }
-        }
-        let idx = found?;
-        score += 16;
-        match prev {
-            Some(p) if idx == p + 1 => score += 15, // consecutive
-            Some(p) => score -= ((idx - p - 1) as i64).min(10), // gap penalty
-            None => score -= (idx as i64).min(10), // prefer earlier first match
-        }
-        if idx == 0 || !hay[idx - 1].is_alphanumeric() {
-            score += 10; // word-boundary bonus
-        }
-        prev = Some(idx);
-    }
-    Some(score)
+/// Normalises an item's text into a scoring haystack: lowercased (matching is
+/// case-insensitive) and capped at [`MAX_HAYSTACK_CHARS`], so one enormous pasted
+/// document can't dominate the cost of a keystroke.
+fn haystack(s: &str) -> String {
+    s.chars()
+        .take(MAX_HAYSTACK_CHARS)
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
 impl Storage {
@@ -448,17 +422,24 @@ impl Storage {
         Ok(files)
     }
 
-    /// Typo-tolerant fuzzy search: ranks live content-bearing items by an fzf-style
-    /// subsequence score against `query`, so "Gthb" still finds "Github". Scans the
-    /// most-recent items (capped) and returns the best `limit`. Complements FTS5
-    /// (`search`), which is exact-prefix.
+    /// Typo-tolerant search: ranks live content-bearing items by Levenshtein (edit)
+    /// distance against `query`, so "Gtihub" still finds "Github" even though no
+    /// subsequence or prefix match exists. Scoring is done by
+    /// [`levenshtein::Matcher`], which measures the distance to the best-matching
+    /// *window* of the item rather than the whole string, so a long clipboard entry
+    /// isn't punished for being long.
+    ///
+    /// Closest match first, recency as the tiebreaker. **Never returns an empty list
+    /// for a non-empty query** — with no relevance cutoff, the nearest items always
+    /// come back even when nothing is a good match. Complements FTS5 (`search`),
+    /// which is exact-prefix and therefore can come back empty.
     pub fn fuzzy_search(&self, query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
         let needle = query.trim().to_lowercase();
-        if needle.is_empty() {
+        let Some(matcher) = Matcher::new(&needle) else {
             return Ok(vec![]);
-        }
+        };
         let conn = self.conn.lock().unwrap();
-        // Cap the scan so a huge history can't make fuzzy search sluggish.
+        // Cap the scan so a huge history can't make search sluggish.
         let mut stmt = conn.prepare(&format!(
             "SELECT {ITEM_COLS} FROM items
              WHERE deleted_at IS NULL AND content IS NOT NULL
@@ -467,15 +448,19 @@ impl Storage {
         let candidates: Vec<ItemDto> =
             stmt.query_map([], map_item)?.collect::<rusqlite::Result<_>>()?;
 
-        let mut scored: Vec<(i64, ItemDto)> = candidates
+        let mut scored: Vec<(f64, ItemDto)> = candidates
             .into_iter()
-            .filter_map(|it| {
-                let hay = it.content.as_deref().unwrap_or("").to_lowercase();
-                fuzzy_score(&needle, &hay).map(|s| (s, it))
+            .map(|it| {
+                let hay = haystack(it.content.as_deref().unwrap_or(""));
+                (matcher.score(&hay), it)
             })
             .collect();
         // Best score first; ties broken by recency.
-        scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.created_at.cmp(&a.1.created_at)));
+        scored.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(b.1.created_at.cmp(&a.1.created_at))
+        });
         scored.truncate(limit.max(0) as usize);
         Ok(scored.into_iter().map(|(_, it)| it).collect())
     }
