@@ -7,6 +7,9 @@ mod classifier;
 mod watcher;
 mod active_window;
 mod capture;
+mod hotkeys;
+mod palette;
+mod stack;
 mod capture_rules;
 mod state;
 mod ipc;
@@ -75,11 +78,29 @@ pub fn run() {
             // set_hotkey IPC command). This handler fires for whichever shortcut is
             // currently registered.
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        return;
+                    }
+                    let state = app.state::<crate::state::AppState>();
+                    match crate::hotkeys::action_for(&state.storage, shortcut) {
+                        Some(crate::hotkeys::Action::PasteNext) => {
+                            if let Err(e) = crate::stack::paste_next(app, &state) {
+                                eprintln!("clipvault: stack paste failed: {e}");
+                            }
+                        }
+                        // The palette window is created on demand; both remaining actions
+                        // are "show me a window", they just differ in which one.
+                        Some(crate::hotkeys::Action::Palette) => {
+                            if let Err(e) = crate::palette::show(app) {
+                                eprintln!("clipvault: palette failed to open: {e}");
+                            }
+                        }
+                        _ => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
                         }
                     }
                 })
@@ -111,27 +132,24 @@ pub fn run() {
                 crate::clipboard_writer::spawn()
             };
 
+            let stack_cursor = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let stack_last_ms = Arc::new(std::sync::atomic::AtomicI64::new(0));
+
             app.manage(crate::state::AppState {
                 storage: storage.clone(),
                 privacy: privacy.clone(),
                 exclude_secrets: exclude_secrets.clone(),
                 last_self_copy: last_self_copy.clone(),
                 writer,
+                stack_cursor: stack_cursor.clone(),
+                stack_last_ms: stack_last_ms.clone(),
             });
 
             // Register the global open-hotkey from settings (default Ctrl+Alt+V). If
             // a stored/custom binding can't be registered (invalid, or reserved by the
             // desktop environment — e.g. Super+V on some GNOME setups), fall back to
             // the default so the user is never left without a way to open the window.
-            {
-                use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                let hotkey = storage
-                    .get_setting("hotkey")?
-                    .unwrap_or_else(|| crate::ipc::DEFAULT_HOTKEY.to_string());
-                if app.global_shortcut().register(hotkey.as_str()).is_err() {
-                    let _ = app.global_shortcut().register(crate::ipc::DEFAULT_HOTKEY);
-                }
-            }
+            crate::hotkeys::register_all(&app.handle().clone(), &storage);
 
             // Keep the login autostart entry in sync with the setting on every start
             // (default on), so a deleted or stale entry heals itself instead of
@@ -172,11 +190,15 @@ pub fn run() {
             // Consume events on another thread: store + notify UI.
             let storage_c = storage.clone();
             let self_copy_c = last_self_copy.clone();
+            let stack_cursor_c = stack_cursor.clone();
             std::thread::spawn(move || {
                 use tauri_plugin_notification::NotificationExt;
                 for ev in rx {
                     match crate::capture::process_event(&storage_c, ev, &self_copy_c) {
                         Ok(crate::capture::Capture::Stored(outcome)) => {
+                            // Something new was copied, so the user has moved on — the
+                            // next stack paste should start from the top again.
+                            stack_cursor_c.store(0, std::sync::atomic::Ordering::Relaxed);
                             let _ = handle.emit("item-added", ());
                             // Link metadata (title + favicon URL) is fetched off this
                             // thread so a slow/unreachable site never blocks capture.
@@ -406,6 +428,10 @@ pub fn run() {
             crate::ipc::get_hotkey,
             crate::ipc::set_hotkey,
             crate::ipc::paste_active,
+            crate::ipc::stack_paste_next,
+            crate::ipc::stack_reset,
+            crate::ipc::show_palette,
+            crate::ipc::hide_palette,
             crate::ipc::ocr_available,
         ])
         .run(tauri::generate_context!())

@@ -6,7 +6,6 @@ mod items;
 pub use items::*;
 mod levenshtein;
 mod query;
-pub use query::*;
 mod similarity;
 pub use similarity::*;
 mod settings;

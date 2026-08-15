@@ -133,18 +133,42 @@ fn build_write_request(
     })
 }
 
-#[tauri::command]
-pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
-    let (ty, content, file_path, hash) = state.storage.get_item(&id)
+/// Put an item's stored bytes on the clipboard verbatim, counting it as a deliberate
+/// reuse and suppressing the echo. Shared by the `copy_item` command and the clipboard
+/// stack, which must behave identically apart from what triggers it.
+pub(crate) fn place_item_on_clipboard(state: &AppState, id: &str) -> Result<(), String> {
+    let (ty, content, file_path, hash) = state.storage.get_item(id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
     // Deliberate reuse from within ClipVault → the one honest usage signal we can observe.
-    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
+    state.storage.increment_reuse(id).map_err(|e| e.to_string())?;
     // Suppress the echo BEFORE writing, so the watcher thread ignores our own copy-back.
     *state.last_self_copy.lock().unwrap() = Some(hash);
-    // Content-based items (text/link/number/color) have no file and are written as
+    // Content-based items (text/link/number/color/file) have no file and are written as
     // UTF8_STRING; only image/gif are written from their file bytes.
     let req = build_write_request(&ty, content, file_path, |s| s)?;
     state.writer.send(req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
+    place_item_on_clipboard(&state, &id)
+}
+
+// ─── Clipboard stack ────────────────────────────────────────────────────────────
+
+/// Paste the next entry down the clipboard stack into the focused window.
+#[tauri::command]
+pub fn stack_paste_next(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<Option<crate::stack::StackStep>, String> {
+    crate::stack::paste_next(&app, &state)
+}
+
+/// Start the next stack run from the most recent entry again.
+#[tauri::command]
+pub fn stack_reset(state: State<AppState>) {
+    crate::stack::reset(&state);
 }
 
 /// Like `copy_item`, but for content-based items (text/link/number/color) applies
@@ -683,6 +707,21 @@ pub fn paste_active() -> Result<(), String> {
     enigo.key(Key::Unicode('v'), Direction::Click).map_err(|e| e.to_string())?;
     enigo.key(Key::Control, Direction::Release).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ─── Quick-paste palette ────────────────────────────────────────────────────────
+
+/// Open the quick-paste palette (also bound to its own global shortcut).
+#[tauri::command]
+pub fn show_palette(app: tauri::AppHandle) -> Result<(), String> {
+    crate::palette::show(&app).map_err(|e| e.to_string())
+}
+
+/// Hide the palette. Called by the palette itself right before it pastes, so focus is
+/// already back in the target window when the keystroke lands.
+#[tauri::command]
+pub fn hide_palette(app: tauri::AppHandle) {
+    crate::palette::hide(&app);
 }
 
 // ─── Global open-hotkey ─────────────────────────────────────────────────────────

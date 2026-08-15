@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize};
 use std::sync::Mutex;
 use crate::storage::Storage;
 
@@ -19,4 +19,9 @@ pub struct AppState {
     /// Channel to the clipboard-writer thread; used by the `copy_item` command to place an
     /// item's bytes back on the X11 CLIPBOARD selection.
     pub writer: std::sync::mpsc::Sender<crate::clipboard_writer::WriteRequest>,
+    /// How far down the clipboard stack the current run has walked. Reset when a new
+    /// item is captured or the run goes cold — see `crate::stack`.
+    pub stack_cursor: Arc<AtomicUsize>,
+    /// When the last stack paste happened (epoch ms), for the idle reset.
+    pub stack_last_ms: Arc<AtomicI64>,
 }

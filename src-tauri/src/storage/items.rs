@@ -264,6 +264,21 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Live items newest-first, pinned included — the true copy order the clipboard
+    /// stack walks down. Distinct from `list_items`, which hides pinned entries because
+    /// the timeline shows them in their own section.
+    pub fn list_stack(&self, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL
+             ORDER BY created_at DESC, id DESC LIMIT ?1"
+        ))?;
+        let rows: Vec<ItemDto> =
+            stmt.query_map(params![limit], map_item)?.collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
     /// Distinct applications entries were copied from, with counts, most-used first.
     /// Feeds the app filter and the blocklist picker in Settings.
     pub fn list_source_apps(&self) -> rusqlite::Result<Vec<(String, i64)>> {
