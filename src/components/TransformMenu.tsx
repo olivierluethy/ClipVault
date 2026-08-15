@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Popover } from "./Popover";
 import { CASE_TRANSFORMS, stripToPlainText, TransformDef } from "../lib/transforms";
-import { copyText, saveTextItem } from "../api";
+import { smartActionsFor } from "../lib/smartActions";
+import { copyText, saveTextItem, Item } from "../api";
 import { CheckIcon, PlusIcon, CopyIcon, CleanIcon, TextIcon } from "./Icon";
 
 const STRIP_TRANSFORM: TransformDef = {
@@ -73,11 +74,20 @@ export function TransformMenu(props: {
   open: boolean;
   onClose: () => void;
   content: string;
+  /** The entry itself, when available — enables the type-specific actions. */
+  item?: Item;
   /** Optional: route the pre-existing backend "Clean copy" here (copy-only). */
   onCleanCopy?: () => void;
   width?: number;
 }) {
   const [flash, setFlash] = useState<string | null>(null);
+
+  // Conversions that only make sense for this kind of entry — a colour into rgb(), a URL
+  // down to its domain. Empty for types with nothing type-specific to offer.
+  const smartActions = useMemo(
+    () => (props.item ? smartActionsFor(props.item) : []),
+    [props.item]
+  );
 
   // Flash a check on the acted row, then dismiss the menu shortly after.
   const finish = (key: string) => {
@@ -106,6 +116,14 @@ export function TransformMenu(props: {
       menu={false}
       className="z-[110] max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-raised p-1 shadow-2xl shadow-black/50"
     >
+      {smartActions.length > 0 && (
+        <>
+          <SectionLabel>For this {props.item?.item_type}</SectionLabel>
+          {smartActions.map((t) => (
+            <TransformRow key={t.key} t={t} flash={flash} onCopy={onCopy} onSave={onSave} />
+          ))}
+        </>
+      )}
       <SectionLabel>Change case</SectionLabel>
       {CASE_TRANSFORMS.map((t) => (
         <TransformRow key={t.key} t={t} flash={flash} onCopy={onCopy} onSave={onSave} />

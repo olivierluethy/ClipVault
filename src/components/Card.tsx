@@ -733,6 +733,7 @@ export function Card(props: {
           open={transformMenuOpen}
           onClose={() => setTransformMenuOpen(false)}
           content={item.content ?? ""}
+          item={item}
           onCleanCopy={props.onCleanCopy}
         />
       )}
