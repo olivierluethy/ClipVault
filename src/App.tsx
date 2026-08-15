@@ -89,6 +89,7 @@ export default function App() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Item[]>([]);
   const [fuzzy, setFuzzy] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [zoom, setZoom] = useState<Item | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -883,6 +884,8 @@ export default function App() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
                   e.currentTarget.blur();
@@ -981,6 +984,20 @@ export default function App() {
           <Duplicates onDeleted={handleDuplicatesDeleted} refreshKey={dupRefresh} />
         ) : (
           <>
+        {searchFocused && !query && (
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-4 py-2 font-mono text-[11px] text-fg-faint">
+            <span className="uppercase tracking-wider">Filters</span>
+            {["type:link", "app:code", "is:pinned", "is:rich", "since:7d", "before:1d"].map(
+              (f) => (
+                <span key={f} className="rounded bg-bg-card px-1.5 py-0.5 text-fg-muted">
+                  {f}
+                </span>
+              )
+            )}
+            <span className="text-fg-faint">— combine with words to narrow a search</span>
+          </div>
+        )}
+
         {isSearching && (
           <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0 text-sm text-fg-muted">
             <span>
