@@ -1,6 +1,7 @@
 use rusqlite::params;
 use uuid::Uuid;
 use super::levenshtein::{Matcher, MAX_HAYSTACK_CHARS};
+use super::query::{self, QueryFilters};
 use super::Storage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -474,11 +475,15 @@ impl Storage {
     /// for a non-empty query** — with no relevance cutoff, the nearest items always
     /// come back even when nothing is a good match. Complements FTS5 (`search`),
     /// which is exact-prefix and therefore can come back empty.
-    pub fn fuzzy_search(&self, query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
-        let needle = query.trim().to_lowercase();
-        let Some(matcher) = Matcher::new(&needle) else {
+    pub fn fuzzy_search(&self, raw_query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let filters = query::parse(raw_query, now_ms());
+        let needle = filters.text.trim().to_lowercase();
+        let matcher = Matcher::new(&needle);
+        // `type:link` on its own is a legitimate query: no text to rank by, so the
+        // filtered rows come back newest-first.
+        if matcher.is_none() && filters.is_empty() {
             return Ok(vec![]);
-        };
+        }
         let conn = self.conn.lock().unwrap();
         // Cap the scan so a huge history can't make search sluggish. Images carry no
         // `content`, so they only qualify once OCR has given them recognised text.
@@ -493,7 +498,12 @@ impl Storage {
 
         let mut scored: Vec<(f64, ItemDto)> = candidates
             .into_iter()
+            .filter(|(it, _)| filters.matches(it))
             .map(|(it, ocr)| {
+                let Some(matcher) = matcher.as_ref() else {
+                    // Filter-only query: recency is the whole ranking.
+                    return (0.0, it);
+                };
                 // An image's words are as good a match target as a text item's body,
                 // so score both haystacks and keep whichever is closer.
                 let mut best = matcher.score(&haystack(it.content.as_deref().unwrap_or("")));
@@ -517,12 +527,15 @@ impl Storage {
     /// single phrase with trailing-token prefix matching (e.g. "hel" matches "hello").
     /// The query is escaped into a quoted phrase so arbitrary user input can never be
     /// interpreted as FTS5 query syntax.
-    pub fn search(&self, query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
-        let query = query.trim();
-        if query.is_empty() {
-            return Ok(vec![]);
+    pub fn search(&self, raw_query: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let filters = query::parse(raw_query, now_ms());
+        let text = filters.text.trim();
+        if text.is_empty() {
+            // Filter-only query (`type:link is:pinned`): no phrase to match, so this is
+            // a plain newest-first listing of whatever survives the filters.
+            return self.filtered_recent(&filters, limit);
         }
-        let fts = format!("\"{}\"*", query.replace('"', "\"\""));
+        let fts = format!("\"{}\"*", text.replace('"', "\"\""));
         let conn = self.conn.lock().unwrap();
         let cols: String = ITEM_COLS
             .split(", ")
@@ -537,11 +550,43 @@ impl Storage {
              LIMIT ?2"
         );
         let mut stmt = conn.prepare(&sql)?;
+        // Over-fetch when filters will thin the results, so a filtered search doesn't
+        // come back short just because the discarded rows used up the limit.
+        let fetch = if filters.is_empty() { limit } else { limit.saturating_mul(8).min(5000) };
         let rows: Vec<ItemDto> = stmt
-            .query_map(params![fts, limit], map_item)?
+            .query_map(params![fts, fetch], map_item)?
             .collect::<rusqlite::Result<_>>()?;
-        Ok(rows)
+        Ok(rows
+            .into_iter()
+            .filter(|it| filters.matches(it))
+            .take(limit.max(0) as usize)
+            .collect())
     }
+
+    /// Newest-first listing of the live items surviving `filters`. Backs a query made
+    /// only of filters, with no text to match.
+    fn filtered_recent(&self, filters: &QueryFilters, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        if filters.is_empty() {
+            return Ok(vec![]);
+        }
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL
+             ORDER BY created_at DESC LIMIT 5000"
+        ))?;
+        let rows: Vec<ItemDto> = stmt.query_map([], map_item)?.collect::<rusqlite::Result<_>>()?;
+        Ok(rows
+            .into_iter()
+            .filter(|it| filters.matches(it))
+            .take(limit.max(0) as usize)
+            .collect())
+    }
+}
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 #[cfg(test)]
