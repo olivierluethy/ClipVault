@@ -5,6 +5,8 @@ use rusqlite::Connection;
 mod items;
 pub use items::*;
 mod levenshtein;
+mod similarity;
+pub use similarity::*;
 mod settings;
 mod folders;
 pub use folders::*;
@@ -208,6 +210,20 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         }
         conn.execute("PRAGMA user_version = 10", [])?;
         version = 10;
+    }
+    if version < 11 {
+        // Perceptual (difference) hash of image items, filled in lazily by the duplicate
+        // scan. Cached because decoding a picture is the expensive part of that scan and
+        // the picture never changes once captured.
+        let existing: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('items')")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        if !existing.iter().any(|c| c == "phash") {
+            conn.execute("ALTER TABLE items ADD COLUMN phash INTEGER", [])?;
+        }
+        conn.execute("PRAGMA user_version = 11", [])?;
+        version = 11;
     }
     let _ = version;
     Ok(())
