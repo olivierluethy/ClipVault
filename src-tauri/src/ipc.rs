@@ -252,7 +252,8 @@ pub fn search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<I
     state.storage.search(&query, limit).map_err(|e| e.to_string())
 }
 
-/// Typo-tolerant fuzzy search (fzf-style ranking) over item content.
+/// Typo-tolerant search over item content and OCR text, ranked by Levenshtein
+/// distance (closest match first). Never returns an empty list for a non-empty query.
 #[tauri::command]
 pub fn fuzzy_search(state: State<AppState>, query: String, limit: i64) -> Result<Vec<ItemDto>, String> {
     state.storage.fuzzy_search(&query, limit).map_err(|e| e.to_string())
