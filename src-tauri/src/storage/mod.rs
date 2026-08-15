@@ -4,6 +4,7 @@ use rusqlite::Connection;
 
 mod items;
 pub use items::*;
+mod levenshtein;
 mod settings;
 mod folders;
 pub use folders::*;
