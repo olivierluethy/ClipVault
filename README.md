@@ -22,6 +22,7 @@ locally in SQLite, no cloud, no telemetry.
 - [Clipboard capture design](#clipboard-capture-design)
 - [Content classification](#content-classification)
 - [Search](#search)
+- [Duplicate cleanup (the "Similar" view)](#duplicate-cleanup-the-similar-view)
 - [IPC API reference](#ipc-api-reference)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Privacy](#privacy)
@@ -339,6 +340,45 @@ How the fuzzy ranking works (`src-tauri/src/storage/levenshtein.rs`):
 
 ---
 
+## Duplicate cleanup (the "Similar" view)
+
+Exact duplicates never reach the history — `insert_or_bump` collapses them by
+`content_hash`. What survives is everything that *hashes* differently but is the same
+thing to a human: a trailing newline, a different case, the same URL carrying a tracking
+query, a snippet re-copied after a one-word edit, or a screenshot re-encoded at another
+size. The **Similar** smart view finds those, groups them, and offers to clean them up.
+
+Detection lives in `src-tauri/src/storage/similarity.rs` and runs three passes over the
+newest 5 000 live items:
+
+1. **Normalize, then group.** Text is trimmed, lowercased, and every run of whitespace
+   collapses to a single space. Links additionally lose their scheme, `www.`, fragment and
+   tracking parameters (`utm_*`, `fbclid`, `gclid`, `si`, …), have their trailing slash
+   dropped and their remaining query sorted. Entries that come out equal are **identical**.
+2. **Near-duplicates.** The distinct normalized forms are compared with the shared
+   Levenshtein `ratio` from the search work. Pairwise comparison of a whole history does
+   not scale, so candidates pass through a sorted-neighbourhood window (two sort orders,
+   32 neighbours each) and two cheap gates — length ratio, then a character-multiset
+   signature that upper-bounds similarity — before any DP runs.
+3. **Images.** Compared by a 64-bit dHash, so a re-encode or a resize still matches. Hashes
+   are cached in `items.phash` (schema v11) because decoding a picture is the expensive
+   part of the scan and the picture never changes.
+
+Pairwise matches merge through a union-find, so a chain (a≈b, b≈c) becomes one cluster.
+**Only entries of the same type are ever compared** — a link is never clustered with a
+text note.
+
+Each cluster nominates a **keeper**: pinned wins, then the most-reused, then the newest.
+Everything else is a removal candidate — except pinned entries, which are never proposed.
+In the UI you can reassign the keeper per cluster, remove one entry, empty a single
+cluster, or remove every non-keeper at once; all removals are soft-deletes routed through
+the standard undo toast.
+
+The threshold lives in Settings (**Strict 98% / Balanced 90% / Loose 80%**, persisted as
+`similarity_threshold`, clamped to `0.5..=1.0`).
+
+---
+
 ## IPC API reference
 
 All commands are defined in `src-tauri/src/ipc.rs` and registered in `lib.rs`. From the
@@ -357,6 +397,9 @@ UI they're called via the typed wrappers in `src/api.ts`.
 | `update_content` | `id, content` | – | Edit a content-based item in place. |
 | `search` | `query, limit` | `Item[]` | FTS5 exact-phrase / prefix search over item content. |
 | `fuzzy_search` | `query, limit` | `Item[]` | Levenshtein-ranked search over content + OCR text, closest first; never empty. |
+| `duplicate_clusters` | – | `DuplicateCluster[]` | Groups of identical / near-identical entries, largest first. |
+| `duplicate_count` | – | `number` | How many entries the Similar view would remove (sidebar badge). |
+| `get_similarity_threshold` / `set_similarity_threshold` | – / `value` | `number` / – | Read / set the clustering threshold. |
 | `get_privacy` / `set_privacy` | – / `on` | `bool` / – | Read / toggle privacy mode. |
 
 **Events** emitted to the UI: `item-added` (after a capture) and `privacy-changed(bool)`.

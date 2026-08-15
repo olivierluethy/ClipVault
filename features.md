@@ -72,6 +72,23 @@ Tailwind + SQLite.
   group via its header checkbox (with an indeterminate state).
 - **Bulk bar.** Add the selection to a folder or delete it in one action.
 
+## Duplicate cleanup
+
+- **Similar view.** A sidebar smart view that groups entries which are the same
+  thing but stored twice — differing only in whitespace, case, line endings, a
+  URL's tracking parameters, a one-word edit, or an image re-encoded at another
+  size. Exact copies are already collapsed at capture time; this catches the rest.
+- **Clusters, not a list.** Each group names a keeper (pinned first, then the
+  most reused, then the newest) and shows how close every other member is —
+  “identical” or “94% alike”.
+- **You choose what survives.** Reassign the keeper inside any group, remove a
+  single entry, empty one group, or remove every non-keeper across all groups at
+  once. Pinned entries are never offered for removal.
+- **Reversible.** Removals go through the standard undo toast, so a bulk cleanup
+  can be taken back.
+- **Tunable.** A Strict / Balanced / Loose threshold in Settings decides how
+  alike two entries have to be.
+
 ## Search & navigation
 
 - **Full-text search.** Fast FTS5 search over item content (`Ctrl+F`), with
