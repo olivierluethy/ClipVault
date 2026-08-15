@@ -15,10 +15,13 @@ import {
   exportData,
   importData,
   getHotkey,
-  setHotkey,
   ocrAvailable,
   getSimilarityThreshold,
   setSimilarityThreshold,
+  getHotkeys,
+  setActionHotkey,
+  listSourceApps,
+  HotkeyAction,
   Stats,
 } from "../api";
 
@@ -115,6 +118,13 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [ocrEnabled, setOcrEnabled] = useState(true);
   const [ocrAvail, setOcrAvail] = useState(true);
   const [similarity, setSimilarity] = useState(0.9);
+  const [paletteHotkey, setPaletteHotkey] = useState("Ctrl+Alt+Space");
+  const [stackHotkey, setStackHotkey] = useState("Ctrl+Alt+B");
+  const [minChars, setMinChars] = useState("0");
+  const [maxChars, setMaxChars] = useState("0");
+  const [ignorePatterns, setIgnorePatterns] = useState("");
+  const [blockedApps, setBlockedApps] = useState("");
+  const [knownApps, setKnownApps] = useState<[string, number][]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -134,6 +144,14 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setOcrEnabled((await getSettingStr("ocr_enabled")) !== "0"); // default on
       setOcrAvail(await ocrAvailable());
       setSimilarity(await getSimilarityThreshold());
+      const keys = await getHotkeys();
+      setPaletteHotkey(keys.palette);
+      setStackHotkey(keys.pasteNext);
+      setMinChars(numOr(await getSettingStr("capture_min_chars"), "0"));
+      setMaxChars(numOr(await getSettingStr("capture_max_chars"), "0"));
+      setIgnorePatterns((await getSettingStr("capture_ignore_patterns")) ?? "");
+      setBlockedApps((await getSettingStr("capture_blocked_apps")) ?? "");
+      setKnownApps(await listSourceApps());
       setStats(await getStats());
     })();
   }, []);
@@ -183,16 +201,41 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
     }
   };
 
-  const changeHotkey = async (accel: string) => {
-    const prev = hotkey;
-    setHotkeyState(accel); // optimistic
+  /** Rebind one shortcut, optimistically. The backend verifies the binding actually
+   *  registered and rejects otherwise, so a combo the desktop has claimed reverts here
+   *  instead of silently doing nothing. */
+  const changeShortcut = async (
+    action: HotkeyAction,
+    accel: string,
+    current: string,
+    apply: (v: string) => void
+  ) => {
+    apply(accel);
     try {
-      await setHotkey(accel);
+      await setActionHotkey(action, accel);
       flash(`Shortcut set to ${accel}.`);
     } catch (e) {
-      setHotkeyState(prev); // registration failed — revert
+      apply(current);
       flash(`${e}`);
     }
+  };
+
+  const changeHotkey = (accel: string) =>
+    changeShortcut("open", accel, hotkey, setHotkeyState);
+
+  /** Toggle one app in the capture blocklist, keeping the stored list newline-separated. */
+  const toggleBlockedApp = (app: string) => {
+    const entries = blockedApps
+      .split(/[\n,]/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    const has = entries.some((e) => e.toLowerCase() === app.toLowerCase());
+    const next = has
+      ? entries.filter((e) => e.toLowerCase() !== app.toLowerCase())
+      : [...entries, app];
+    const value = next.join("\n");
+    setBlockedApps(value);
+    setSettingStr("capture_blocked_apps", value);
   };
 
   const startTimedPrivacy = async (minutes: number) => {
@@ -356,6 +399,155 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
               <span className="text-xs text-fg-muted">
                 Some combos (e.g. Super+V) may be reserved by your desktop; if one can't
                 be registered it reverts to the previous shortcut.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex flex-col">
+                  <span className="text-sm text-fg">Quick-paste palette</span>
+                  <span className="text-xs text-fg-muted">
+                    Search and paste without opening the window.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg">
+                  {paletteHotkey}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {["Ctrl+Alt+Space", "Super+Space", "Ctrl+Shift+Space", "Alt+Space"].map((accel) => (
+                  <button
+                    key={accel}
+                    onClick={() =>
+                      changeShortcut("palette", accel, paletteHotkey, setPaletteHotkey)
+                    }
+                    className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
+                      paletteHotkey === accel
+                        ? "border-accent bg-accent-dim/40 text-fg"
+                        : "border-border text-fg-muted hover:text-fg hover:border-accent"
+                    }`}
+                  >
+                    {accel}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex flex-col">
+                  <span className="text-sm text-fg">Paste next in sequence</span>
+                  <span className="text-xs text-fg-muted">
+                    Walks down your recent entries, one per press.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg">
+                  {stackHotkey}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {["Ctrl+Alt+B", "Ctrl+Shift+B", "Super+B", "Ctrl+Alt+N"].map((accel) => (
+                  <button
+                    key={accel}
+                    onClick={() => changeShortcut("pasteNext", accel, stackHotkey, setStackHotkey)}
+                    className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
+                      stackHotkey === accel
+                        ? "border-accent bg-accent-dim/40 text-fg"
+                        : "border-border text-fg-muted hover:text-fg hover:border-accent"
+                    }`}
+                  >
+                    {accel}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Section>
+
+          <Section title="What gets captured">
+            <NumberField
+              label="Skip anything shorter than"
+              hint="Characters. 0 keeps everything."
+              value={minChars}
+              onCommit={(v) => {
+                setMinChars(v);
+                setSettingStr("capture_min_chars", v);
+              }}
+            />
+            <NumberField
+              label="Skip anything longer than"
+              hint="Characters. 0 means no limit beyond the 1 MB hard cap."
+              value={maxChars}
+              onCommit={(v) => {
+                setMaxChars(v);
+                setSettingStr("capture_max_chars", v);
+              }}
+            />
+
+            <div className="flex flex-col gap-1.5 py-2">
+              <span className="flex flex-col">
+                <span className="text-sm text-fg">Never capture apps</span>
+                <span className="text-xs text-fg-muted">
+                  Stronger than secret detection — nothing copied in these is stored, whether
+                  or not the app marks it.
+                </span>
+              </span>
+              {knownApps.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {knownApps.slice(0, 12).map(([app, count]) => {
+                    const blocked = blockedApps
+                      .toLowerCase()
+                      .split(/[\n,]/)
+                      .map((e) => e.trim())
+                      .includes(app.toLowerCase());
+                    return (
+                      <button
+                        key={app}
+                        onClick={() => toggleBlockedApp(app)}
+                        aria-pressed={blocked}
+                        title={`${count} ${count === 1 ? "entry" : "entries"} from ${app}`}
+                        className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
+                          blocked
+                            ? "border-accent bg-accent/15 text-accent"
+                            : "border-border text-fg-muted hover:border-accent hover:text-fg"
+                        }`}
+                      >
+                        {app}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <textarea
+                value={blockedApps}
+                onChange={(e) => setBlockedApps(e.target.value)}
+                onBlur={() => setSettingStr("capture_blocked_apps", blockedApps)}
+                placeholder="keepassxc&#10;bitwarden"
+                spellCheck={false}
+                className="min-h-16 w-full resize-y rounded border border-border bg-bg p-2 font-mono text-xs text-fg focus:border-accent focus:outline-none"
+              />
+              <span className="text-xs text-fg-muted">
+                One per line, matched loosely — “keepass” covers “KeePassXC”.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5 py-2">
+              <span className="flex flex-col">
+                <span className="text-sm text-fg">Never capture text matching</span>
+                <span className="text-xs text-fg-muted">
+                  One regular expression per line. For content only you can recognise — an
+                  internal ticket format, a token shape.
+                </span>
+              </span>
+              <textarea
+                value={ignorePatterns}
+                onChange={(e) => setIgnorePatterns(e.target.value)}
+                onBlur={() => setSettingStr("capture_ignore_patterns", ignorePatterns)}
+                placeholder="^ghp_[A-Za-z0-9]{36}$&#10;INTERNAL-\\d+"
+                spellCheck={false}
+                className="min-h-16 w-full resize-y rounded border border-border bg-bg p-2 font-mono text-xs text-fg focus:border-accent focus:outline-none"
+              />
+              <span className="text-xs text-fg-muted">
+                An invalid pattern is skipped, not fatal — the rest keep working.
               </span>
             </div>
           </Section>
