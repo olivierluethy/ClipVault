@@ -439,20 +439,27 @@ impl Storage {
             return Ok(vec![]);
         };
         let conn = self.conn.lock().unwrap();
-        // Cap the scan so a huge history can't make search sluggish.
+        // Cap the scan so a huge history can't make search sluggish. Images carry no
+        // `content`, so they only qualify once OCR has given them recognised text.
         let mut stmt = conn.prepare(&format!(
-            "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND content IS NOT NULL
+            "SELECT {ITEM_COLS}, ocr_text FROM items
+             WHERE deleted_at IS NULL AND (content IS NOT NULL OR ocr_text IS NOT NULL)
              ORDER BY created_at DESC LIMIT 5000"
         ))?;
-        let candidates: Vec<ItemDto> =
-            stmt.query_map([], map_item)?.collect::<rusqlite::Result<_>>()?;
+        let candidates: Vec<(ItemDto, Option<String>)> = stmt
+            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(12)?)))?
+            .collect::<rusqlite::Result<_>>()?;
 
         let mut scored: Vec<(f64, ItemDto)> = candidates
             .into_iter()
-            .map(|it| {
-                let hay = haystack(it.content.as_deref().unwrap_or(""));
-                (matcher.score(&hay), it)
+            .map(|(it, ocr)| {
+                // An image's words are as good a match target as a text item's body,
+                // so score both haystacks and keep whichever is closer.
+                let mut best = matcher.score(&haystack(it.content.as_deref().unwrap_or("")));
+                if let Some(ocr) = ocr.as_deref().filter(|s| !s.is_empty()) {
+                    best = best.max(matcher.score(&haystack(ocr)));
+                }
+                (best, it)
             })
             .collect();
         // Best score first; ties broken by recency.
