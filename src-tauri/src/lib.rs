@@ -6,6 +6,7 @@ mod storage;
 mod classifier;
 mod watcher;
 mod capture;
+mod capture_rules;
 mod state;
 mod ipc;
 mod thumbnail;
@@ -174,7 +175,7 @@ pub fn run() {
                 use tauri_plugin_notification::NotificationExt;
                 for ev in rx {
                     match crate::capture::process_event(&storage_c, ev, &self_copy_c) {
-                        Ok(Some(outcome)) => {
+                        Ok(crate::capture::Capture::Stored(outcome)) => {
                             let _ = handle.emit("item-added", ());
                             // Link metadata (title + favicon URL) is fetched off this
                             // thread so a slow/unreachable site never blocks capture.
@@ -221,16 +222,18 @@ pub fn run() {
                                 }
                             }
                         }
-                        Ok(None) => {
-                            // Either an oversized item was skipped, or a self-copy was
-                            // suppressed; either way capture::process_event already logs
-                            // the oversized case. Notify the user in the oversized case
-                            // by best-effort desktop notification.
+                        // The app's own copy-back echoing off the clipboard. Constant and
+                        // expected — stay silent.
+                        Ok(crate::capture::Capture::SelfCopy) => {}
+                        Ok(crate::capture::Capture::Skipped(reason)) => {
+                            // A rule the user set (or a hard size guard) rejected this
+                            // entry. Say which, so a silent gap in the history is never a
+                            // mystery.
                             let _ = handle
                                 .notification()
                                 .builder()
                                 .title("ClipVault")
-                                .body("Skipped an oversized clipboard item")
+                                .body(format!("Skipped a clipboard item — {reason}"))
                                 .show();
                         }
                         Err(e) => eprintln!("clipvault: capture error: {e}"),

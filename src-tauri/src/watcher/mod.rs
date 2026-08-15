@@ -9,6 +9,21 @@ pub mod wayland;
 pub struct ClipEvent {
     pub mime: String,
     pub bytes: Vec<u8>,
+    /// The window class (X11 `WM_CLASS`) of whatever was focused when the copy happened,
+    /// when it could be determined. Powers the "copied from" column, the per-app filter,
+    /// and the per-app capture blocklist.
+    pub source_app: Option<String>,
+    /// The `text/html` flavour offered alongside plain text, when the owner had one.
+    /// Kept so formatting survives a trip through the history.
+    pub html: Option<String>,
+}
+
+impl ClipEvent {
+    /// A plain event with no source app and no rich-text flavour — the shape most
+    /// call sites want.
+    pub fn new(mime: impl Into<String>, bytes: Vec<u8>) -> ClipEvent {
+        ClipEvent { mime: mime.into(), bytes, source_app: None, html: None }
+    }
 }
 
 /// Read the CURRENT clipboard value once, using the Wayland tools on a pure-Wayland

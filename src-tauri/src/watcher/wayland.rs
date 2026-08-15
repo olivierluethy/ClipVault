@@ -82,13 +82,13 @@ pub fn read_clipboard_once() -> Option<ClipEvent> {
     }
     if types.iter().any(|t| is_text_type(t)) {
         if let Some(bytes) = read_text() {
-            return Some(ClipEvent { mime: "UTF8_STRING".to_string(), bytes });
+            return Some(ClipEvent::new("UTF8_STRING".to_string(), bytes));
         }
     }
     for m in IMAGE_MIMES {
         if types.iter().any(|t| t == m) {
             if let Some(bytes) = read_typed(m) {
-                return Some(ClipEvent { mime: m.to_string(), bytes });
+                return Some(ClipEvent::new(m.to_string(), bytes));
             }
         }
     }
@@ -119,12 +119,12 @@ impl ClipboardBackend for WaylandBackend {
                 && types.iter().any(|t| t == "x-kde-passwordManagerHint");
 
             let ev = if types.iter().any(|t| is_text_type(t)) {
-                read_text().map(|bytes| ClipEvent { mime: "UTF8_STRING".to_string(), bytes })
+                read_text().map(|bytes| ClipEvent::new("UTF8_STRING".to_string(), bytes))
             } else {
                 IMAGE_MIMES
                     .iter()
                     .find(|m| types.iter().any(|t| t == **m))
-                    .and_then(|m| read_typed(m).map(|bytes| ClipEvent { mime: m.to_string(), bytes }))
+                    .and_then(|m| read_typed(m).map(|bytes| ClipEvent::new(m.to_string(), bytes)))
             };
             let Some(ev) = ev else { continue };
 

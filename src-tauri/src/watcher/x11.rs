@@ -53,7 +53,7 @@ pub fn read_clipboard_once() -> Option<ClipEvent> {
 
     if let Ok(bytes) = clipboard.load(selection, utf8, property, Duration::from_millis(800)) {
         if !bytes.is_empty() {
-            return Some(ClipEvent { mime: "UTF8_STRING".to_string(), bytes });
+            return Some(ClipEvent::new("UTF8_STRING".to_string(), bytes));
         }
     }
 
@@ -61,7 +61,7 @@ pub fn read_clipboard_once() -> Option<ClipEvent> {
         let Ok(atom) = clipboard.getter.get_atom(mime) else { continue };
         if let Ok(bytes) = clipboard.load(selection, atom, property, Duration::from_millis(300)) {
             if !bytes.is_empty() {
-                return Some(ClipEvent { mime: mime.to_string(), bytes });
+                return Some(ClipEvent::new(mime.to_string(), bytes));
             }
         }
     }
@@ -172,7 +172,7 @@ impl ClipboardBackend for X11Backend {
                 // text and an image (the design's stated image>text priority is
                 // deferred; enumerating TARGETS is not viable with this crate — see
                 // the module's Phase-1 follow-ups).
-                let _ = tx.send(ClipEvent { mime: "UTF8_STRING".to_string(), bytes: text });
+                let _ = tx.send(ClipEvent::new("UTF8_STRING".to_string(), text));
                 continue;
             }
 
@@ -193,7 +193,7 @@ impl ClipboardBackend for X11Backend {
             for (mime, atom) in &image_targets {
                 match self.clipboard.load(selection, *atom, property, Duration::from_millis(150)) {
                     Ok(bytes) if !bytes.is_empty() => {
-                        let _ = tx.send(ClipEvent { mime: mime.to_string(), bytes });
+                        let _ = tx.send(ClipEvent::new(mime.to_string(), bytes));
                         break;
                     }
                     _ => {}
