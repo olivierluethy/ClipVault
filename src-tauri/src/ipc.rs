@@ -782,52 +782,76 @@ pub fn hide_palette(app: tauri::AppHandle) {
     crate::palette::hide(&app);
 }
 
-// ─── Global open-hotkey ─────────────────────────────────────────────────────────
+// ─── Global shortcuts ───────────────────────────────────────────────────────────
 
-/// The hotkey used when the user hasn't chosen one. Also the fallback in `lib.rs`
-/// if a stored/custom binding fails to register.
-pub const DEFAULT_HOTKEY: &str = "Ctrl+Alt+V";
-
-/// The currently configured global open-hotkey (accelerator string, e.g.
-/// "Ctrl+Alt+V" or "Super+V"). Returns the default if none has been set.
-#[tauri::command]
-pub fn get_hotkey(state: State<AppState>) -> Result<String, String> {
-    Ok(state
-        .storage
-        .get_setting("hotkey")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_else(|| DEFAULT_HOTKEY.to_string()))
+fn action_from_str(name: &str) -> Result<crate::hotkeys::Action, String> {
+    match name {
+        "open" => Ok(crate::hotkeys::Action::Open),
+        "palette" => Ok(crate::hotkeys::Action::Palette),
+        "pasteNext" | "paste_next" => Ok(crate::hotkeys::Action::PasteNext),
+        other => Err(format!("unknown shortcut '{other}'")),
+    }
 }
 
-/// Re-register the global open-hotkey to `hotkey` and persist it. Unregisters the
-/// old binding first. If the new accelerator is invalid or can't be registered
-/// (e.g. reserved by the desktop environment), the previous binding is restored
-/// and an error is returned so the UI can surface it — the user is never left
-/// without a working hotkey.
+/// The currently configured global open-hotkey. Kept for the Welcome tips, which only
+/// ever mention this one.
 #[tauri::command]
-pub fn set_hotkey(app: tauri::AppHandle, state: State<AppState>, hotkey: String) -> Result<(), String> {
+pub fn get_hotkey(state: State<AppState>) -> String {
+    crate::hotkeys::accelerator(&state.storage, crate::hotkeys::Action::Open)
+}
+
+/// All three shortcuts, keyed by action.
+#[tauri::command]
+pub fn get_hotkeys(state: State<AppState>) -> std::collections::HashMap<String, String> {
+    [
+        ("open", crate::hotkeys::Action::Open),
+        ("palette", crate::hotkeys::Action::Palette),
+        ("pasteNext", crate::hotkeys::Action::PasteNext),
+    ]
+    .into_iter()
+    .map(|(name, action)| (name.to_string(), crate::hotkeys::accelerator(&state.storage, action)))
+    .collect()
+}
+
+/// Rebind one shortcut and persist it.
+///
+/// All three are re-registered together: the plugin's `unregister_all` is the only
+/// reliable way to release a binding, so rebinding one in isolation would silently drop
+/// the other two. If the new accelerator won't register (invalid, or reserved by the
+/// desktop environment) the previous value is restored and an error comes back for the UI
+/// to surface — the user is never left without a working shortcut.
+#[tauri::command]
+pub fn set_action_hotkey(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    action: String,
+    hotkey: String,
+) -> Result<(), String> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let action = action_from_str(&action)?;
     let hotkey = hotkey.trim().to_string();
     if hotkey.is_empty() {
-        return Err("Hotkey must not be empty".to_string());
+        return Err("Shortcut must not be empty".to_string());
     }
-    let gs = app.global_shortcut();
-    let _ = gs.unregister_all();
-    match gs.register(hotkey.as_str()) {
-        Ok(_) => state
-            .storage
-            .set_setting("hotkey", &hotkey)
-            .map_err(|e| e.to_string()),
-        Err(e) => {
-            // Restore the previously working binding (stored value, else default).
-            let prev = state
-                .storage
-                .get_setting("hotkey")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| DEFAULT_HOTKEY.to_string());
-            let _ = gs.register(prev.as_str());
-            Err(format!("Could not register '{hotkey}': {e}"))
-        }
+
+    let previous = crate::hotkeys::accelerator(&state.storage, action);
+    state.storage.set_setting(action.setting_key(), &hotkey).map_err(|e| e.to_string())?;
+    crate::hotkeys::register_all(&app, &state.storage);
+
+    // register_all falls back silently, so verify the binding we were asked for actually
+    // took, and roll back if it didn't.
+    let registered = app.global_shortcut().is_registered(hotkey.as_str());
+    if !registered {
+        state.storage.set_setting(action.setting_key(), &previous).map_err(|e| e.to_string())?;
+        crate::hotkeys::register_all(&app, &state.storage);
+        return Err(format!("Could not register '{hotkey}' — it may be taken by the system"));
     }
+    Ok(())
+}
+
+/// Rebind the open-hotkey. Thin wrapper kept so the existing Settings control and any
+/// stored automation keep working.
+#[tauri::command]
+pub fn set_hotkey(app: tauri::AppHandle, state: State<AppState>, hotkey: String) -> Result<(), String> {
+    set_action_hotkey(app, state, "open".to_string(), hotkey)
 }

@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type Item = {
   id: string;
-  item_type: "text" | "link" | "number" | "color" | "image" | "gif";
+  item_type: "text" | "link" | "number" | "color" | "image" | "gif" | "file";
   content: string | null;
   file_path: string | null;
   preview_path: string | null;
@@ -19,6 +19,13 @@ export type Item = {
   metadata: string | null;
   /** Self-destruct time (epoch ms), or null to keep forever. */
   expires_at: number | null;
+  /** Window class of the app this was copied from (X11 only), or null. */
+  source_app: string | null;
+  /** The text/html flavour the source offered, if any — the entry can be pasted
+   *  back with its formatting intact. */
+  html: string | null;
+  /** Authored template rather than captured history; expands placeholders on copy. */
+  is_snippet: boolean;
 };
 
 export const listItems = (limit = 100, beforeCreatedAt?: number, beforeId?: string) =>
@@ -54,6 +61,8 @@ export const listFrequent = (limit = 100) => invoke<Item[]>("list_frequent", { l
 /** How many items qualify for the Frequent view (copy_count >= 2). */
 export const frequentCount = () => invoke<number>("frequent_count");
 export const folderCounts = () => invoke<[string, number][]>("folder_counts");
+/** Apps entries were copied from, with counts — most-used first. */
+export const listSourceApps = () => invoke<[string, number][]>("list_source_apps");
 /** Distinct local days ("YYYY-MM-DD") that contain items, with counts. */
 export const itemDayCounts = () => invoke<[string, number][]>("item_day_counts");
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
@@ -65,6 +74,8 @@ export const copyText = (text: string) => invoke<void>("copy_text", { text });
  *  too. Backs Multi-Copy-Merge and every "Save as new entry" action. */
 export const saveTextItem = (text: string, copyToClipboard: boolean) =>
   invoke<void>("save_text_item", { text, copyToClipboard });
+/** Copy an entry back with its formatting, using the stored text/html flavour. */
+export const copyItemHtml = (id: string) => invoke<void>("copy_item_html", { id });
 export const deleteItem = (id: string) => invoke<void>("delete_item", { id });
 export const restoreItem = (id: string) => invoke<void>("restore_item", { id });
 export const setPinned = (id: string, pinned: boolean) => invoke<void>("set_pinned", { id, pinned });
@@ -109,6 +120,36 @@ export const search = (query: string, limit = 200) => invoke<Item[]>("search", {
 /** Typo-tolerant search ranked by Levenshtein distance. "Gtihub" still finds "Github". */
 export const fuzzySearch = (query: string, limit = 200) =>
   invoke<Item[]>("fuzzy_search", { query, limit });
+
+// ─── Snippets ──────────────────────────────────────────────────────────────────
+
+export const listSnippets = () => invoke<Item[]>("list_snippets");
+export const snippetCount = () => invoke<number>("snippet_count");
+export const createSnippet = (content: string) => invoke<string>("create_snippet", { content });
+/** Move a captured entry into the snippet library, or send it back to history. */
+export const setSnippet = (id: string, isSnippet: boolean) =>
+  invoke<void>("set_snippet", { id, isSnippet });
+/** Expand a snippet's placeholders and put the result on the clipboard. */
+export const copySnippet = (id: string) => invoke<string>("copy_snippet", { id });
+/** What a template would expand to right now, without touching the clipboard. */
+export const previewSnippet = (template: string) =>
+  invoke<string>("preview_snippet", { template });
+
+// ─── Clipboard stack ───────────────────────────────────────────────────────────
+
+export type StackStep = { position: number; total: number; preview: string };
+
+/** Paste the next entry down the stack into the focused window. */
+export const stackPasteNext = () => invoke<StackStep | null>("stack_paste_next");
+/** Start the next stack run from the most recent entry again. */
+export const stackReset = () => invoke<void>("stack_reset");
+export const onStackAdvanced = (cb: (s: StackStep) => void) =>
+  listen<StackStep>("stack-advanced", (e) => cb(e.payload));
+
+// ─── Quick-paste palette ───────────────────────────────────────────────────────
+
+export const showPalette = () => invoke<void>("show_palette");
+export const hidePalette = () => invoke<void>("hide_palette");
 
 // ─── Duplicates ("Similar" view) ───────────────────────────────────────────────
 
@@ -180,6 +221,13 @@ export const ocrAvailable = () => invoke<boolean>("ocr_available");
 export const getHotkey = () => invoke<string>("get_hotkey");
 /** Re-register + persist the global open-hotkey. Rejects if it can't be registered. */
 export const setHotkey = (hotkey: string) => invoke<void>("set_hotkey", { hotkey });
+
+/** The three global shortcuts, by action. */
+export type HotkeyAction = "open" | "palette" | "pasteNext";
+export const getHotkeys = () => invoke<Record<HotkeyAction, string>>("get_hotkeys");
+/** Re-register + persist one shortcut. Rejects if it can't be registered. */
+export const setActionHotkey = (action: HotkeyAction, hotkey: string) =>
+  invoke<void>("set_action_hotkey", { action, hotkey });
 
 /** Hide the main window to the tray (used after Enter-to-copy in the speed workflow). */
 export const hideWindow = () => getCurrentWindow().hide();

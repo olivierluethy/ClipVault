@@ -428,6 +428,8 @@ pub fn run() {
             crate::ipc::open_url,
             crate::ipc::get_hotkey,
             crate::ipc::set_hotkey,
+            crate::ipc::get_hotkeys,
+            crate::ipc::set_action_hotkey,
             crate::ipc::paste_active,
             crate::ipc::list_snippets,
             crate::ipc::snippet_count,
