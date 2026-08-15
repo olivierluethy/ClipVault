@@ -261,13 +261,13 @@ pub fn fuzzy_search(state: State<AppState>, query: String, limit: i64) -> Result
 
 /// Clusters of identical / near-identical entries for the "Similar" view, largest first.
 #[tauri::command]
-pub fn duplicate_clusters(state: State<AppState>) -> Result<Vec<DuplicateCluster>, String> {
+pub async fn duplicate_clusters(state: State<'_, AppState>) -> Result<Vec<DuplicateCluster>, String> {
     state.storage.duplicate_clusters().map_err(|e| e.to_string())
 }
 
 /// How many entries the "Similar" view would offer to remove. Drives the sidebar badge.
 #[tauri::command]
-pub fn duplicate_count(state: State<AppState>) -> Result<i64, String> {
+pub async fn duplicate_count(state: State<'_, AppState>) -> Result<i64, String> {
     state.storage.duplicate_count().map_err(|e| e.to_string())
 }
 
