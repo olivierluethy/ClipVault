@@ -238,6 +238,19 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 12", [])?;
         version = 12;
     }
+    if version < 13 {
+        // The text/html flavour offered alongside plain text, kept so formatting can
+        // survive a trip through the history.
+        let existing: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('items')")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        if !existing.iter().any(|c| c == "html") {
+            conn.execute("ALTER TABLE items ADD COLUMN html TEXT", [])?;
+        }
+        conn.execute("PRAGMA user_version = 13", [])?;
+        version = 13;
+    }
     let _ = version;
     Ok(())
 }

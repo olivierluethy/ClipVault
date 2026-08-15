@@ -11,6 +11,15 @@ use super::{ClipEvent, ClipboardBackend};
 /// Image MIME targets we probe on a non-text clipboard change, in priority order.
 const IMAGE_MIMES: [&str; 3] = ["image/gif", "image/png", "image/jpeg"];
 
+/// Rich-text flavour probed alongside plain text. Browsers and editors offer both; the
+/// plain text stays the entry's content and this is kept as a sidecar so formatting can
+/// be pasted back later.
+const HTML_MIME: &str = "text/html";
+
+/// Upper bound on a stored HTML flavour. A page's worth of markup is worth keeping; a
+/// whole document's is not, and the plain-text copy is never lost either way.
+const MAX_HTML: usize = 262_144; // 256 KB
+
 pub struct X11Backend {
     clipboard: Clipboard,
 }
@@ -53,7 +62,17 @@ pub fn read_clipboard_once() -> Option<ClipEvent> {
 
     if let Ok(bytes) = clipboard.load(selection, utf8, property, Duration::from_millis(800)) {
         if !bytes.is_empty() {
-            return Some(ClipEvent::new("UTF8_STRING".to_string(), bytes));
+            let mut ev = ClipEvent::new("UTF8_STRING".to_string(), bytes);
+            if let Ok(atom) = clipboard.getter.get_atom(HTML_MIME) {
+                if let Ok(html) =
+                    clipboard.load(selection, atom, property, Duration::from_millis(200))
+                {
+                    if !html.is_empty() && html.len() <= MAX_HTML {
+                        ev.html = Some(String::from_utf8_lossy(&html).into_owned());
+                    }
+                }
+            }
+            return Some(ev);
         }
     }
 
@@ -115,6 +134,9 @@ impl ClipboardBackend for X11Backend {
         // reads, not a connection handshake. `None` if the WM doesn't advertise
         // _NET_ACTIVE_WINDOW — capture carries on without a source app.
         let active_window = crate::active_window::ActiveWindow::new();
+
+        // Rich-text sidecar target, interned once.
+        let html_target = self.atom(HTML_MIME).ok();
 
         let mut consecutive_failures: u32 = 0;
 
@@ -183,6 +205,18 @@ impl ClipboardBackend for X11Backend {
                 // the module's Phase-1 follow-ups).
                 let mut ev = ClipEvent::new("UTF8_STRING".to_string(), text);
                 ev.source_app = source_app;
+                // Probe the rich-text flavour. Best-effort and short-timeout: an owner
+                // that offers no HTML simply yields nothing, and the plain text is
+                // already in hand either way.
+                if let Some(atom) = html_target {
+                    if let Ok(bytes) =
+                        self.clipboard.load(selection, atom, property, Duration::from_millis(120))
+                    {
+                        if !bytes.is_empty() && bytes.len() <= MAX_HTML {
+                            ev.html = Some(String::from_utf8_lossy(&bytes).into_owned());
+                        }
+                    }
+                }
                 let _ = tx.send(ev);
                 continue;
             }

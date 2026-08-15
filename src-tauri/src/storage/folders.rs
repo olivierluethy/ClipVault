@@ -172,6 +172,7 @@ mod tests {
                 preview_path: None,
                 content_hash: hash.into(),
                 source_app: None,
+                html: None,
             },
             t,
         ).unwrap();

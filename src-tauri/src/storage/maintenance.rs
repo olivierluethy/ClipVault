@@ -216,7 +216,7 @@ mod tests {
 
     fn add(s: &Storage, c: &str, h: &str, t: i64) {
         s.insert_or_bump(
-            NewItem { item_type: ItemType::Text, content: Some(c.into()), file_path: None, preview_path: None, content_hash: h.into(), source_app: None },
+            NewItem { item_type: ItemType::Text, content: Some(c.into()), file_path: None, preview_path: None, content_hash: h.into(), source_app: None, html: None },
             t,
         ).unwrap();
     }

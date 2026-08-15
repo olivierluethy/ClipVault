@@ -338,7 +338,7 @@ impl Storage {
              ORDER BY created_at DESC LIMIT {SCAN_LIMIT}"
         ))?;
         let rows: Vec<(ItemDto, Option<i64>)> = stmt
-            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<i64>>(13)?)))?
+            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<i64>>(14)?)))?
             .collect::<rusqlite::Result<_>>()?;
         drop(stmt);
 

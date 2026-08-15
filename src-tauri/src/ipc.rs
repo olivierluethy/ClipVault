@@ -163,6 +163,23 @@ pub fn copy_item_clean(state: State<AppState>, id: String) -> Result<(), String>
     write_and_mark(&state, req)
 }
 
+/// Copy an entry back with its formatting: writes the stored `text/html` flavour rather
+/// than the plain text, so a rich editor receiving the paste keeps bold, links and lists.
+///
+/// The clipboard writer owns one selection target at a time, so this is a deliberate
+/// either/or rather than an offering of both flavours: `copy_item` puts plain text on the
+/// clipboard, this puts HTML. Errors when the entry has no stored HTML.
+#[tauri::command]
+pub fn copy_item_html(state: State<AppState>, id: String) -> Result<(), String> {
+    let html = state
+        .storage
+        .item_html(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or("this entry has no formatted version")?;
+    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
+    write_and_mark(&state, WriteRequest { mime: "text/html".into(), bytes: html.into_bytes() })
+}
+
 /// Write arbitrary UTF-8 `text` to the system clipboard, suppressing the echo so the
 /// watcher does not re-capture it as a new history item. Used by the per-item
 /// Transform actions (case conversions, strip-to-plain-text) and code Format, whose
@@ -195,6 +212,7 @@ pub fn save_text_item(
         preview_path: None,
         content_hash: hash.clone(),
         source_app: None,
+        html: None,
     };
     state
         .storage

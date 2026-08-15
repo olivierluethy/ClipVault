@@ -40,6 +40,8 @@ pub struct NewItem {
     pub content_hash: String,
     /// Window class of the app the content came from, when known.
     pub source_app: Option<String>,
+    /// The `text/html` flavour offered alongside the plain text, when there was one.
+    pub html: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -74,10 +76,13 @@ pub struct ItemDto {
     /// determined (X11 only — Wayland does not let a client ask). `None` for entries
     /// captured before this was recorded, and for anything the app created itself.
     pub source_app: Option<String>,
+    /// The `text/html` flavour the source offered alongside plain text, when there was
+    /// one. Present means the entry can be copied back with its formatting intact.
+    pub html: Option<String>,
 }
 
 pub(crate) const ITEM_COLS: &str =
-    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at, source_app";
+    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at, source_app, html";
 
 pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
@@ -85,6 +90,7 @@ pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
         preview_path: r.get(4)?, copy_count: r.get(5)?, reuse_count: r.get(6)?,
         pinned: r.get::<_, i64>(7)? != 0, created_at: r.get(8)?, updated_at: r.get(9)?,
         metadata: r.get(10)?, expires_at: r.get(11)?, source_app: r.get(12)?,
+        html: r.get(13)?,
     })
 }
 
@@ -121,9 +127,9 @@ impl Storage {
 
         let id = Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO items (id, type, content, file_path, preview_path, content_hash, copy_count, created_at, updated_at, source_app)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, ?8)",
-            params![id, item.item_type.as_str(), item.content, item.file_path, item.preview_path, item.content_hash, now, item.source_app],
+            "INSERT INTO items (id, type, content, file_path, preview_path, content_hash, copy_count, created_at, updated_at, source_app, html)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, ?8, ?9)",
+            params![id, item.item_type.as_str(), item.content, item.file_path, item.preview_path, item.content_hash, now, item.source_app, item.html],
         )?;
         if let Some(content) = &item.content {
             conn.execute(
@@ -421,6 +427,18 @@ impl Storage {
         }
     }
 
+    /// The stored `text/html` flavour of an entry, if the source offered one.
+    pub fn item_html(&self, id: &str) -> rusqlite::Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        match conn.query_row("SELECT html FROM items WHERE id = ?1", params![id], |r| {
+            r.get::<_, Option<String>>(0)
+        }) {
+            Ok(v) => Ok(v),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Deletes rows already soft-deleted, returning their (file_path, preview_path)
     /// so the caller can remove the backing files. Called from `Storage::open` on startup.
     pub fn purge_deleted(&self) -> rusqlite::Result<Vec<(Option<String>, Option<String>)>> {
@@ -468,7 +486,7 @@ impl Storage {
              ORDER BY created_at DESC LIMIT 5000"
         ))?;
         let candidates: Vec<(ItemDto, Option<String>)> = stmt
-            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(13)?)))?
+            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(14)?)))?
             .collect::<rusqlite::Result<_>>()?;
 
         let mut scored: Vec<(f64, ItemDto)> = candidates
@@ -538,7 +556,7 @@ mod tests {
     fn insert_then_duplicate_bumps() {
         let (_d, s) = storage();
         let item = NewItem { item_type: ItemType::Text, content: Some("hi".into()),
-            file_path: None, preview_path: None, content_hash: "h1".into(), source_app: None };
+            file_path: None, preview_path: None, content_hash: "h1".into(), source_app: None, html: None };
         let a = s.insert_or_bump(item.clone(), 1000).unwrap();
         assert!(matches!(a, InsertOutcome::Inserted(_)));
         let b = s.insert_or_bump(item.clone(), 2000).unwrap();
