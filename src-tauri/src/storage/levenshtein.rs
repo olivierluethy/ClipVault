@@ -149,6 +149,42 @@ impl Matcher {
     }
 }
 
+/// Plain end-to-end Levenshtein distance between two strings — the *whole* of `a` against
+/// the *whole* of `b`, unlike [`Matcher`], which looks for `a` somewhere inside `b`.
+///
+/// This is what duplicate detection wants: two clipboard entries are near-identical only
+/// if they match over their full length, not if one merely contains the other.
+pub fn distance(a: &[char], b: &[char]) -> usize {
+    if a.is_empty() {
+        return b.len();
+    }
+    if b.is_empty() {
+        return a.len();
+    }
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut cur: Vec<usize> = vec![0; b.len() + 1];
+
+    for (i, &ac) in a.iter().enumerate() {
+        cur[0] = i + 1;
+        for (j, &bc) in b.iter().enumerate() {
+            let cost = usize::from(ac != bc);
+            cur[j + 1] = (prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+    prev[b.len()]
+}
+
+/// Similarity in `0.0..=1.0` derived from [`distance`]: `1.0` means identical, `0.0` means
+/// nothing survives the alignment. Two empty strings count as identical.
+pub fn ratio(a: &[char], b: &[char]) -> f64 {
+    let longest = a.len().max(b.len());
+    if longest == 0 {
+        return 1.0;
+    }
+    1.0 - distance(a, b) as f64 / longest as f64
+}
+
 /// Rolling two-row DP fallback for queries wider than one machine word. Row 0 is held at
 /// zero so the alignment may start anywhere; the answer is the smallest value the last
 /// row ever takes, i.e. it may also end anywhere.
