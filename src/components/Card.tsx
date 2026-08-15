@@ -31,6 +31,7 @@ const TYPE_CODE: Record<Item["item_type"], string> = {
   color: "HEX",
   image: "IMG",
   gif: "GIF",
+  file: "FILE",
 };
 
 function timeLabel(ts: number): string {

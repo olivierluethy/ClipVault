@@ -8,6 +8,17 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  // Two windows, two entry points: the main history window and the quick-paste palette.
+  // The palette is a separate document so summoning it doesn't load the timeline.
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        palette: "palette.html",
+      },
+    },
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
