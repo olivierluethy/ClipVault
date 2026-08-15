@@ -21,6 +21,7 @@ locally in SQLite, no cloud, no telemetry.
 - [Data model & storage](#data-model--storage)
 - [Clipboard capture design](#clipboard-capture-design)
 - [Content classification](#content-classification)
+- [Search](#search)
 - [IPC API reference](#ipc-api-reference)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Privacy](#privacy)
@@ -302,6 +303,42 @@ time; the v3 migration re-classifies items captured before this existed.
 
 ---
 
+## Search
+
+`Ctrl+F` focuses the search box. Typing filters the timeline; the **X** button inside the
+box (visible as soon as there is a query) clears it and returns to the folder view, exactly
+like pressing `Esc`.
+
+The `~fuzzy` toggle at the right of the box picks between two backends:
+
+| Mode | Command | Behaviour |
+|---|---|---|
+| Exact (default) | `search` | SQLite **FTS5**: the query is escaped into a single quoted phrase with trailing-token prefix matching, so `hel` matches `hello`. Fast and precise; returns nothing if the phrase isn't there. |
+| `~fuzzy` | `fuzzy_search` | **Levenshtein ranking**: items are scored by edit distance, so `Gtihub` still finds `Github`. |
+
+How the fuzzy ranking works (`src-tauri/src/storage/levenshtein.rs`):
+
+- **Best-window distance.** The distance is measured against the closest-matching *window*
+  of the item, not the whole string — otherwise a long clipboard entry would always lose to
+  a short query. This is the approximate-substring variant of the edit-distance DP, where
+  the alignment may begin and end anywhere in the haystack.
+- **Bit-parallel.** Queries up to 64 characters run Myers' algorithm — one machine word per
+  haystack character — so a full scan stays cheap. Longer queries fall back to a rolling
+  two-row DP.
+- **Ordering.** A literal substring hit always outranks a near miss (and gets bonuses for
+  starting at a word boundary and for appearing early). Near misses score
+  `1 / (1 + distance / query_len)`, which is strictly decreasing, so results have a real
+  ordering rather than a wall of ties. Recency breaks remaining ties.
+- **Never empty.** There is no relevance cutoff — a non-empty query always returns the
+  nearest items, even when nothing matches well.
+- **OCR included.** Text recognized from images (`ocr_text`) is scored alongside item
+  content, so a screenshot is findable by the words in it.
+- **Bounded work.** The scan is capped at the 5 000 most recent live items, and each
+  haystack is lowercased and truncated to 4 000 characters. The exact FTS path still covers
+  the full text of every item.
+
+---
+
 ## IPC API reference
 
 All commands are defined in `src-tauri/src/ipc.rs` and registered in `lib.rs`. From the
@@ -318,6 +355,8 @@ UI they're called via the typed wrappers in `src/api.ts`.
 | `restore_item` | `id` | – | Undo a soft-delete. |
 | `set_pinned` | `id, pinned` | – | Pin / unpin. |
 | `update_content` | `id, content` | – | Edit a content-based item in place. |
+| `search` | `query, limit` | `Item[]` | FTS5 exact-phrase / prefix search over item content. |
+| `fuzzy_search` | `query, limit` | `Item[]` | Levenshtein-ranked search over content + OCR text, closest first; never empty. |
 | `get_privacy` / `set_privacy` | – / `on` | `bool` / – | Read / toggle privacy mode. |
 
 **Events** emitted to the UI: `item-added` (after a capture) and `privacy-changed(bool)`.
@@ -329,13 +368,14 @@ UI they're called via the typed wrappers in `src/api.ts`.
 | Key | Action |
 |---|---|
 | `Ctrl+Alt+V` | Summon / focus the window (global, works from anywhere) |
+| `Ctrl+F` | Focus the search box |
 | `↑` / `↓` | Move selection |
 | `Enter` | Copy selected item back to clipboard |
 | `1`–`9` | Copy the Nth visible item |
 | `Del` | Delete selected (with undo toast) |
 | `E` | Edit selected content item |
 | `P` | Pin / unpin selected |
-| `Esc` | Close zoom modal / cancel edit |
+| `Esc` | Close zoom modal / cancel edit / clear search |
 
 ---
 

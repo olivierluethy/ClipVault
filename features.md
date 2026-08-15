@@ -76,6 +76,13 @@ Tailwind + SQLite.
 
 - **Full-text search.** Fast FTS5 search over item content (`Ctrl+F`), with
   prefix matching; works within any view.
+- **Typo-tolerant search.** The `~fuzzy` toggle switches to Levenshtein
+  (edit-distance) ranking, so “Gtihub” still finds “Github”. Results are sorted
+  closest-match-first with recency as the tiebreaker, and a query never returns
+  an empty list — the nearest items always show up. Text recognized from images
+  by OCR is searched too.
+- **Clear the search.** An “X” inside the search box appears as soon as you type
+  and resets back to the folder view (`Esc` does the same).
 - **Date filter.** A calendar picker that highlights days containing items and
   filters the timeline to a chosen day/range.
 - **Date navigation rail.** A right-side chronological rail with scroll-spy that
