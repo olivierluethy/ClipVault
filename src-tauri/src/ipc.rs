@@ -64,6 +64,13 @@ pub fn folder_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, Strin
     state.storage.folder_counts().map_err(|e| e.to_string())
 }
 
+/// Applications entries were copied from, with counts — the app filter and the
+/// blocklist picker in Settings both read this.
+#[tauri::command]
+pub fn list_source_apps(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
+    state.storage.list_source_apps().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn item_day_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
     state.storage.item_day_counts().map_err(|e| e.to_string())
@@ -187,6 +194,7 @@ pub fn save_text_item(
         file_path: None,
         preview_path: None,
         content_hash: hash.clone(),
+        source_app: None,
     };
     state
         .storage
@@ -323,7 +331,10 @@ pub(crate) fn quick_add_core(
     app: &tauri::AppHandle,
     state: &AppState,
 ) -> Result<bool, String> {
-    let Some(ev) = crate::watcher::read_clipboard_once() else { return Ok(false) };
+    let Some(mut ev) = crate::watcher::read_clipboard_once() else { return Ok(false) };
+    // Quick Add is triggered from ClipVault itself, so the focused window is ours —
+    // record whatever the user had open before instead of nothing at all.
+    ev.source_app = crate::active_window::active_window_class();
     let added = matches!(
         crate::capture::process_event(&state.storage, ev, &state.last_self_copy)
             .map_err(|e| e.to_string())?,

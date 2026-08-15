@@ -97,6 +97,7 @@ fn cmd_add(rest: &[String]) -> i32 {
         file_path: None,
         preview_path: None,
         content_hash: sha256_hex(text.as_bytes()),
+        source_app: None,
     };
     match storage.insert_or_bump(item, now_ms()) {
         Ok(_) => {

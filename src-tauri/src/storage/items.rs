@@ -38,6 +38,8 @@ pub struct NewItem {
     pub file_path: Option<String>,
     pub preview_path: Option<String>,
     pub content_hash: String,
+    /// Window class of the app the content came from, when known.
+    pub source_app: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -68,17 +70,21 @@ pub struct ItemDto {
     /// Optional self-destruct time (epoch ms). When set and reached, a background
     /// reaper hard-deletes the item. `None` = keeps forever (the default).
     pub expires_at: Option<i64>,
+    /// Window class of the app that was focused when this was copied, when it could be
+    /// determined (X11 only — Wayland does not let a client ask). `None` for entries
+    /// captured before this was recorded, and for anything the app created itself.
+    pub source_app: Option<String>,
 }
 
 pub(crate) const ITEM_COLS: &str =
-    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at";
+    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at, source_app";
 
 pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
         id: r.get(0)?, item_type: r.get(1)?, content: r.get(2)?, file_path: r.get(3)?,
         preview_path: r.get(4)?, copy_count: r.get(5)?, reuse_count: r.get(6)?,
         pinned: r.get::<_, i64>(7)? != 0, created_at: r.get(8)?, updated_at: r.get(9)?,
-        metadata: r.get(10)?, expires_at: r.get(11)?,
+        metadata: r.get(10)?, expires_at: r.get(11)?, source_app: r.get(12)?,
     })
 }
 
@@ -115,9 +121,9 @@ impl Storage {
 
         let id = Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO items (id, type, content, file_path, preview_path, content_hash, copy_count, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)",
-            params![id, item.item_type.as_str(), item.content, item.file_path, item.preview_path, item.content_hash, now],
+            "INSERT INTO items (id, type, content, file_path, preview_path, content_hash, copy_count, created_at, updated_at, source_app)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, ?8)",
+            params![id, item.item_type.as_str(), item.content, item.file_path, item.preview_path, item.content_hash, now, item.source_app],
         )?;
         if let Some(content) = &item.content {
             conn.execute(
@@ -245,6 +251,21 @@ impl Storage {
         let mut stmt = conn.prepare(&sql)?;
         let rows: Vec<ItemDto> = stmt
             .query_map(rusqlite::params![limit], map_item)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    /// Distinct applications entries were copied from, with counts, most-used first.
+    /// Feeds the app filter and the blocklist picker in Settings.
+    pub fn list_source_apps(&self) -> rusqlite::Result<Vec<(String, i64)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT source_app, COUNT(*) AS n FROM items
+             WHERE deleted_at IS NULL AND source_app IS NOT NULL AND source_app <> ''
+             GROUP BY source_app ORDER BY n DESC, source_app ASC",
+        )?;
+        let rows: Vec<(String, i64)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
         Ok(rows)
     }
@@ -447,7 +468,7 @@ impl Storage {
              ORDER BY created_at DESC LIMIT 5000"
         ))?;
         let candidates: Vec<(ItemDto, Option<String>)> = stmt
-            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(12)?)))?
+            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(13)?)))?
             .collect::<rusqlite::Result<_>>()?;
 
         let mut scored: Vec<(f64, ItemDto)> = candidates
@@ -517,7 +538,7 @@ mod tests {
     fn insert_then_duplicate_bumps() {
         let (_d, s) = storage();
         let item = NewItem { item_type: ItemType::Text, content: Some("hi".into()),
-            file_path: None, preview_path: None, content_hash: "h1".into() };
+            file_path: None, preview_path: None, content_hash: "h1".into(), source_app: None };
         let a = s.insert_or_bump(item.clone(), 1000).unwrap();
         assert!(matches!(a, InsertOutcome::Inserted(_)));
         let b = s.insert_or_bump(item.clone(), 2000).unwrap();

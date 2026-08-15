@@ -111,6 +111,11 @@ impl ClipboardBackend for X11Backend {
         // probed per-change (both text and image branches) below.
         let secret_hint = self.atom("x-kde-passwordManagerHint").ok();
 
+        // Reused across every change so recording the source app costs two property
+        // reads, not a connection handshake. `None` if the WM doesn't advertise
+        // _NET_ACTIVE_WINDOW — capture carries on without a source app.
+        let active_window = crate::active_window::ActiveWindow::new();
+
         let mut consecutive_failures: u32 = 0;
 
         loop {
@@ -167,12 +172,18 @@ impl ClipboardBackend for X11Backend {
                 }
             }
 
+            // Read the focused window now, while the app the user copied from is still
+            // the active one. Cheap enough to do before knowing which branch we take.
+            let source_app = active_window.as_ref().and_then(|a| a.class());
+
             if !text.is_empty() {
                 // Phase-0 accepted trade-off: text wins when an owner offers BOTH
                 // text and an image (the design's stated image>text priority is
                 // deferred; enumerating TARGETS is not viable with this crate — see
                 // the module's Phase-1 follow-ups).
-                let _ = tx.send(ClipEvent::new("UTF8_STRING".to_string(), text));
+                let mut ev = ClipEvent::new("UTF8_STRING".to_string(), text);
+                ev.source_app = source_app;
+                let _ = tx.send(ev);
                 continue;
             }
 
@@ -193,7 +204,9 @@ impl ClipboardBackend for X11Backend {
             for (mime, atom) in &image_targets {
                 match self.clipboard.load(selection, *atom, property, Duration::from_millis(150)) {
                     Ok(bytes) if !bytes.is_empty() => {
-                        let _ = tx.send(ClipEvent::new(mime.to_string(), bytes));
+                        let mut ev = ClipEvent::new(mime.to_string(), bytes);
+                        ev.source_app = source_app.clone();
+                        let _ = tx.send(ev);
                         break;
                     }
                     _ => {}

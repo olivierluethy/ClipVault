@@ -5,6 +5,7 @@ pub mod cli;
 mod storage;
 mod classifier;
 mod watcher;
+mod active_window;
 mod capture;
 mod capture_rules;
 mod state;
@@ -359,6 +360,7 @@ pub fn run() {
             crate::ipc::frequent_count,
             crate::ipc::folder_counts,
             crate::ipc::item_day_counts,
+            crate::ipc::list_source_apps,
             crate::ipc::set_pinned,
             crate::ipc::delete_item,
             crate::ipc::restore_item,

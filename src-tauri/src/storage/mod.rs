@@ -225,6 +225,19 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 11", [])?;
         version = 11;
     }
+    if version < 12 {
+        // Which application was focused when the entry was copied. Powers the
+        // "copied from" meta, the `app:` search filter, and the per-app blocklist.
+        let existing: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('items')")?
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        if !existing.iter().any(|c| c == "source_app") {
+            conn.execute("ALTER TABLE items ADD COLUMN source_app TEXT", [])?;
+        }
+        conn.execute("PRAGMA user_version = 12", [])?;
+        version = 12;
+    }
     let _ = version;
     Ok(())
 }

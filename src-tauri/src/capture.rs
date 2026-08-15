@@ -75,7 +75,7 @@ pub fn process_event(
                 return Ok(Capture::Skipped(rejection.reason()));
             }
             let refined_type = classify_text(&text);
-            NewItem { item_type: refined_type, content: Some(text), file_path: None, preview_path: None, content_hash: hash }
+            NewItem { item_type: refined_type, content: Some(text), file_path: None, preview_path: None, content_hash: hash, source_app: ev.source_app.clone() }
         }
         ItemType::Image | ItemType::Gif => {
             // Only write the file if this is a new hash; check first to avoid orphan files.
@@ -97,7 +97,8 @@ pub fn process_event(
             }
             NewItem { item_type, content: None,
                 file_path: Some(path.to_string_lossy().into_owned()),
-                preview_path: preview, content_hash: hash }
+                preview_path: preview, content_hash: hash,
+                source_app: ev.source_app.clone() }
         }
     };
 
