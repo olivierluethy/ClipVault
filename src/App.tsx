@@ -53,7 +53,7 @@ import { DateNavMenu } from "./components/DateNavMenu";
 import { ListHeader } from "./components/ListHeader";
 import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
-import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon } from "./components/Icon";
+import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon, XIcon } from "./components/Icon";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
@@ -790,8 +790,24 @@ export default function App() {
                 }
               }}
               placeholder={fuzzy ? "Fuzzy search…" : "Search clipboard…"}
-              className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-16 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+              className="w-full rounded-md border border-border bg-bg-card py-1.5 pl-8 pr-24 text-sm text-fg placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
             />
+            {/* Visible way out of a search — same effect as Escape, but keeps the
+                caret in the box so the next query can be typed straight away. */}
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  clearSearch();
+                  searchInputRef.current?.focus();
+                }}
+                aria-label="Clear search"
+                title="Clear search"
+                className="absolute right-[3.7rem] top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-fg-faint transition-colors hover:bg-bg-hover hover:text-fg-muted"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={() => setFuzzy((v) => !v)}
               aria-pressed={fuzzy}
