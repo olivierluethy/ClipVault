@@ -255,6 +255,22 @@ export const EyeOffIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A page with a folded corner — marks entries copied out of a file manager.
+export const FileIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+    <path d="M14 3v5h5" />
+  </Svg>
+);
+
+// A bookmarked page — marks the Snippets library: things you wrote to reuse.
+export const SnippetIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-3.5L6 21V4.5Z" />
+    <path d="M9.5 8h5" />
+  </Svg>
+);
+
 // Two offset sheets — marks the "Similar" view, where entries come in stacks.
 export const StackIcon = (p: IconProps) => (
   <Svg {...p}>

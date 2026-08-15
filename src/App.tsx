@@ -16,6 +16,7 @@ import {
   folderCounts,
   frequentCount,
   duplicateCount,
+  snippetCount,
   onItemAdded,
   FolderDto,
   listFolders,
@@ -56,6 +57,7 @@ import { DateFilter } from "./components/DateFilter";
 import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon, XIcon } from "./components/Icon";
 import Duplicates from "./components/Duplicates";
+import Snippets from "./components/Snippets";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
@@ -92,6 +94,8 @@ export default function App() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [freqCount, setFreqCount] = useState(0);
   const [dupCount, setDupCount] = useState(0);
+  const [snipCount, setSnipCount] = useState(0);
+  const [snipRefresh, setSnipRefresh] = useState(0);
   // Bumped to make the Similar view re-scan after something outside it changed the
   // history (an undone removal, a capture).
   const [dupRefresh, setDupRefresh] = useState(0);
@@ -120,6 +124,10 @@ export default function App() {
   // timer while items keep arriving.
   const reloadDupCount = useCallback(async () => {
     setDupCount(await duplicateCount());
+  }, []);
+
+  const reloadSnippetCount = useCallback(async () => {
+    setSnipCount(await snippetCount());
   }, []);
 
   useEffect(() => {
@@ -167,6 +175,10 @@ export default function App() {
       un.then((f) => f());
     };
   }, [reloadFolders]);
+
+  useEffect(() => {
+    reloadSnippetCount();
+  }, [reloadSnippetCount]);
 
   useEffect(() => {
     reloadDupCount();
@@ -238,6 +250,7 @@ export default function App() {
     anchorIndexRef.current = null;
     setFolder(f);
     if (f === "similar") setDupRefresh((n) => n + 1);
+    if (f === "snippets") setSnipRefresh((n) => n + 1);
   }, [clearSearch]);
 
   // Removals made inside the Similar view feed the app's standard undo toast, so a
@@ -263,6 +276,8 @@ export default function App() {
   // The Similar view replaces the timeline entirely — it shows clusters, not a
   // chronological list — so a search or a date filter takes precedence over it.
   const isDuplicatesView = folder === "similar" && !isSearching && !dateRange;
+  // The Snippets library is likewise not a timeline — authored templates, not history.
+  const isSnippetsView = folder === "snippets" && !isSearching && !dateRange;
 
   // The Links view can group by domain instead of by date.
   const linkGrouping = folder === "link" && groupByDomain && !isSearching && !dateRange;
@@ -795,6 +810,7 @@ export default function App() {
         counts={counts}
         frequentCount={freqCount}
         duplicateCount={dupCount}
+        snippetCount={snipCount}
         selected={folder}
         onSelect={handleSelectFolder}
         folders={folders}
@@ -914,7 +930,15 @@ export default function App() {
           </button>
         </header>
 
-        {isDuplicatesView ? (
+        {isSnippetsView ? (
+          <Snippets
+            onChanged={() => {
+              reloadSnippetCount();
+              reloadCounts();
+            }}
+            refreshKey={snipRefresh}
+          />
+        ) : isDuplicatesView ? (
           <Duplicates onDeleted={handleDuplicatesDeleted} refreshKey={dupRefresh} />
         ) : (
           <>

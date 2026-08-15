@@ -9,6 +9,8 @@ import {
   SwatchIcon,
   FlameIcon,
   StackIcon,
+  FileIcon,
+  SnippetIcon,
   FolderIcon,
   FolderPlusIcon,
   EditIcon,
@@ -34,6 +36,9 @@ const SYSTEM: SysFolder[] = [
   { id: "number", label: "Numbers", Icon: HashIcon },
   { id: "image", label: "Images & GIFs", Icon: ImageIcon },
   { id: "color", label: "Colors", Icon: SwatchIcon },
+  { id: "file", label: "Files", Icon: FileIcon, title: "Files copied in the file manager" },
+  // Smart view: authored templates, not captured history.
+  { id: "snippets", label: "Snippets", Icon: SnippetIcon, title: "Reusable templates you wrote" },
 ];
 
 function countFor(id: string, counts: Record<string, number>): number {
@@ -185,6 +190,7 @@ export function Sidebar({
   counts,
   frequentCount,
   duplicateCount,
+  snippetCount,
   selected,
   onSelect,
   folders,
@@ -201,6 +207,8 @@ export function Sidebar({
   frequentCount: number;
   /** Removable entries the "Similar" smart view found; likewise kept out of `counts`. */
   duplicateCount: number;
+  /** How many snippets exist; kept out of `counts` since they aren't captured history. */
+  snippetCount: number;
   selected: string;
   onSelect: (id: string) => void;
   folders: FolderDto[];
@@ -265,6 +273,8 @@ export function Sidebar({
                   ? frequentCount
                   : f.id === "similar"
                   ? duplicateCount
+                  : f.id === "snippets"
+                  ? snippetCount
                   : countFor(f.id, counts)
               }
               title={f.title ?? f.label}
