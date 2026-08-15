@@ -82,10 +82,13 @@ pub struct ItemDto {
     /// The `text/html` flavour the source offered alongside plain text, when there was
     /// one. Present means the entry can be copied back with its formatting intact.
     pub html: Option<String>,
+    /// True for entries the user authored as reusable templates rather than copied.
+    /// Snippets live in their own view and expand their placeholders when copied.
+    pub is_snippet: bool,
 }
 
 pub(crate) const ITEM_COLS: &str =
-    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at, source_app, html";
+    "id, type, content, file_path, preview_path, copy_count, reuse_count, pinned, created_at, updated_at, metadata, expires_at, source_app, html, is_snippet";
 
 pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
     Ok(ItemDto {
@@ -93,7 +96,7 @@ pub(crate) fn map_item(r: &rusqlite::Row) -> rusqlite::Result<ItemDto> {
         preview_path: r.get(4)?, copy_count: r.get(5)?, reuse_count: r.get(6)?,
         pinned: r.get::<_, i64>(7)? != 0, created_at: r.get(8)?, updated_at: r.get(9)?,
         metadata: r.get(10)?, expires_at: r.get(11)?, source_app: r.get(12)?,
-        html: r.get(13)?,
+        html: r.get(13)?, is_snippet: r.get::<_, i64>(14)? != 0,
     })
 }
 
@@ -163,7 +166,7 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND pinned = 0
+             WHERE deleted_at IS NULL AND pinned = 0 AND is_snippet = 0
                AND (?2 IS NULL
                     OR created_at < ?2
                     OR (created_at = ?2 AND id < ?3))
@@ -191,7 +194,7 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL
+             WHERE deleted_at IS NULL AND is_snippet = 0
                AND created_at >= ?4 AND created_at < ?5
                AND (?2 IS NULL
                     OR created_at < ?2
@@ -219,7 +222,7 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND type = ?4
+             WHERE deleted_at IS NULL AND type = ?4 AND is_snippet = 0
                AND (?2 IS NULL
                     OR created_at < ?2
                     OR (created_at = ?2 AND id < ?3))
@@ -253,7 +256,7 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND reuse_count >= 1
+             WHERE deleted_at IS NULL AND reuse_count >= 1 AND is_snippet = 0
              ORDER BY reuse_count DESC, updated_at DESC, id DESC
              LIMIT ?1"
         );
@@ -264,6 +267,59 @@ impl Storage {
         Ok(rows)
     }
 
+    /// Every snippet, newest first. Snippets are excluded from the ordinary timeline —
+    /// they are a library, not history, and would otherwise sit in "All" forever.
+    pub fn list_snippets(&self) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL AND is_snippet = 1
+             ORDER BY created_at DESC, id DESC"
+        ))?;
+        let rows: Vec<ItemDto> = stmt.query_map([], map_item)?.collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
+
+    /// How many snippets exist, for the sidebar badge.
+    pub fn snippet_count(&self) -> rusqlite::Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND is_snippet = 1",
+            [],
+            |r| r.get(0),
+        )
+    }
+
+    /// Creates a snippet from authored `content`.
+    ///
+    /// Snippets deliberately skip content-hash dedup: two snippets may legitimately hold
+    /// the same text (a draft and its edit), and a snippet must never collapse onto some
+    /// unrelated captured entry that happens to match. Each gets a unique synthetic hash.
+    pub fn create_snippet(&self, content: &str, now: i64) -> rusqlite::Result<String> {
+        let id = Uuid::new_v4().to_string();
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO items (id, type, content, content_hash, copy_count, created_at, updated_at, is_snippet)
+             VALUES (?1, 'text', ?2, ?3, 1, ?4, ?4, 1)",
+            params![id, content, format!("snippet:{id}"), now],
+        )?;
+        conn.execute(
+            "INSERT INTO items_fts (item_id, content) VALUES (?1, ?2)",
+            params![id, content],
+        )?;
+        Ok(id)
+    }
+
+    /// Promotes a captured entry to a snippet, or demotes it back to plain history.
+    pub fn set_snippet(&self, id: &str, is_snippet: bool) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE items SET is_snippet = ?1 WHERE id = ?2",
+            params![i64::from(is_snippet), id],
+        )?;
+        Ok(())
+    }
+
     /// Live items newest-first, pinned included — the true copy order the clipboard
     /// stack walks down. Distinct from `list_items`, which hides pinned entries because
     /// the timeline shows them in their own section.
@@ -271,7 +327,7 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL
+             WHERE deleted_at IS NULL AND is_snippet = 0
              ORDER BY created_at DESC, id DESC LIMIT ?1"
         ))?;
         let rows: Vec<ItemDto> =
@@ -299,7 +355,7 @@ impl Storage {
     pub fn frequent_count(&self) -> rusqlite::Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
-            "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND reuse_count >= 1",
+            "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND reuse_count >= 1 AND is_snippet = 0",
             [],
             |r| r.get(0),
         )
@@ -323,7 +379,7 @@ impl Storage {
     pub fn folder_counts(&self) -> rusqlite::Result<Vec<(String, i64)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT type, COUNT(*) FROM items WHERE deleted_at IS NULL GROUP BY type"
+            "SELECT type, COUNT(*) FROM items WHERE deleted_at IS NULL AND is_snippet = 0 GROUP BY type"
         )?;
         let rows: Vec<(String, i64)> = stmt
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -335,7 +391,7 @@ impl Storage {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(&format!(
             "SELECT {ITEM_COLS} FROM items
-             WHERE deleted_at IS NULL AND pinned = 1 ORDER BY created_at DESC"
+             WHERE deleted_at IS NULL AND is_snippet = 0 AND pinned = 1 ORDER BY created_at DESC"
         ))?;
         let rows: rusqlite::Result<Vec<ItemDto>> = stmt.query_map([], map_item)?.collect();
         rows
@@ -508,7 +564,7 @@ impl Storage {
              ORDER BY created_at DESC LIMIT 5000"
         ))?;
         let candidates: Vec<(ItemDto, Option<String>)> = stmt
-            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(14)?)))?
+            .query_map([], |r| Ok((map_item(r)?, r.get::<_, Option<String>>(15)?)))?
             .collect::<rusqlite::Result<_>>()?;
 
         let mut scored: Vec<(f64, ItemDto)> = candidates

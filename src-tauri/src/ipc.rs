@@ -154,6 +154,64 @@ pub fn copy_item(state: State<AppState>, id: String) -> Result<(), String> {
     place_item_on_clipboard(&state, &id)
 }
 
+// ─── Snippets ───────────────────────────────────────────────────────────────────
+
+/// Every snippet, newest first.
+#[tauri::command]
+pub fn list_snippets(state: State<AppState>) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_snippets().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn snippet_count(state: State<AppState>) -> Result<i64, String> {
+    state.storage.snippet_count().map_err(|e| e.to_string())
+}
+
+/// Create a snippet from authored text. Returns its id.
+#[tauri::command]
+pub fn create_snippet(app: tauri::AppHandle, state: State<AppState>, content: String) -> Result<String, String> {
+    let id = state.storage.create_snippet(&content, now_ms()).map_err(|e| e.to_string())?;
+    let _ = app.emit("item-added", ());
+    Ok(id)
+}
+
+/// Promote a captured entry into the snippet library, or send it back to history.
+#[tauri::command]
+pub fn set_snippet(app: tauri::AppHandle, state: State<AppState>, id: String, is_snippet: bool) -> Result<(), String> {
+    state.storage.set_snippet(&id, is_snippet).map_err(|e| e.to_string())?;
+    let _ = app.emit("item-added", ());
+    Ok(())
+}
+
+/// Expand a snippet's placeholders and put the result on the clipboard.
+///
+/// Expansion happens at copy time, not when the snippet is written — that is the whole
+/// point of `{{date}}`. The expanded text is NOT stored: a snippet is a template, and
+/// rewriting it with today's date would destroy it after one use.
+#[tauri::command]
+pub fn copy_snippet(state: State<AppState>, id: String) -> Result<String, String> {
+    let (_, content, _, _) = state.storage.get_item(&id)
+        .map_err(|e| e.to_string())?.ok_or("snippet not found")?;
+    let template = content.ok_or("this snippet has no text")?;
+    let expanded = crate::snippets::expand(&template, now_ms(), || {
+        crate::watcher::read_clipboard_once().and_then(|ev| {
+            (ev.mime == "UTF8_STRING").then(|| String::from_utf8_lossy(&ev.bytes).into_owned())
+        })
+    });
+    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
+    write_and_mark(
+        &state,
+        WriteRequest { mime: "UTF8_STRING".into(), bytes: expanded.clone().into_bytes() },
+    )?;
+    Ok(expanded)
+}
+
+/// Preview what a snippet would expand to, without touching the clipboard.
+#[tauri::command]
+pub fn preview_snippet(template: String) -> String {
+    crate::snippets::expand(&template, now_ms(), || None)
+}
+
 // ─── Clipboard stack ────────────────────────────────────────────────────────────
 
 /// Paste the next entry down the clipboard stack into the focused window.

@@ -9,6 +9,7 @@ mod active_window;
 mod capture;
 mod hotkeys;
 mod palette;
+mod snippets;
 mod stack;
 mod capture_rules;
 mod state;
@@ -428,6 +429,12 @@ pub fn run() {
             crate::ipc::get_hotkey,
             crate::ipc::set_hotkey,
             crate::ipc::paste_active,
+            crate::ipc::list_snippets,
+            crate::ipc::snippet_count,
+            crate::ipc::create_snippet,
+            crate::ipc::set_snippet,
+            crate::ipc::copy_snippet,
+            crate::ipc::preview_snippet,
             crate::ipc::stack_paste_next,
             crate::ipc::stack_reset,
             crate::ipc::show_palette,
