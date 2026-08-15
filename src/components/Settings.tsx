@@ -17,8 +17,19 @@ import {
   getHotkey,
   setHotkey,
   ocrAvailable,
+  getSimilarityThreshold,
+  setSimilarityThreshold,
   Stats,
 } from "../api";
+
+/** Presets for the Similar view's threshold. Discrete steps rather than a raw slider:
+ *  the difference between 0.90 and 0.91 is not something anyone can judge, but the
+ *  difference between "only exact copies" and "anything close" is. */
+const SIMILARITY_PRESETS: { value: number; label: string; hint: string }[] = [
+  { value: 0.98, label: "Strict", hint: "Only entries that are virtually identical." },
+  { value: 0.9, label: "Balanced", hint: "Catches small edits and reformatting." },
+  { value: 0.8, label: "Loose", hint: "Groups anything broadly alike — expect more." },
+];
 
 function Toggle(props: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
@@ -103,6 +114,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [autoPaste, setAutoPaste] = useState(false);
   const [ocrEnabled, setOcrEnabled] = useState(true);
   const [ocrAvail, setOcrAvail] = useState(true);
+  const [similarity, setSimilarity] = useState(0.9);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -121,6 +133,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setAutoPaste((await getSettingStr("auto_paste")) === "1");
       setOcrEnabled((await getSettingStr("ocr_enabled")) !== "0"); // default on
       setOcrAvail(await ocrAvailable());
+      setSimilarity(await getSimilarityThreshold());
       setStats(await getStats());
     })();
   }, []);
@@ -244,6 +257,47 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
                   </button>
                 ))}
               </div>
+            </div>
+          </Section>
+
+          <Section title="Duplicates">
+            <div className="flex flex-col gap-2 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="flex flex-col">
+                  <span className="text-sm text-fg">How alike counts as a duplicate</span>
+                  <span className="text-xs text-fg-muted">
+                    Sets what the Similar view groups together.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg tnum">
+                  {Math.round(similarity * 100)}%
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {SIMILARITY_PRESETS.map((p) => (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      setSimilarity(p.value);
+                      setSimilarityThreshold(p.value);
+                      flash(`Similar view set to ${p.label.toLowerCase()}.`);
+                    }}
+                    title={p.hint}
+                    aria-pressed={Math.abs(similarity - p.value) < 0.005}
+                    className={`rounded border px-2 py-1 text-xs transition-colors ${
+                      Math.abs(similarity - p.value) < 0.005
+                        ? "border-accent bg-accent/15 text-accent"
+                        : "border-border text-fg-muted hover:border-accent hover:text-fg"
+                    }`}
+                  >
+                    {p.label} · {Math.round(p.value * 100)}%
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-fg-muted">
+                {SIMILARITY_PRESETS.find((p) => Math.abs(similarity - p.value) < 0.005)?.hint ??
+                  "Custom threshold."}
+              </span>
             </div>
           </Section>
 

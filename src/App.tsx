@@ -1163,7 +1163,12 @@ export default function App() {
 
       {settingsOpen && (
         <Settings
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            // The similarity threshold lives in Settings; re-scan in case it moved.
+            reloadDupCount();
+            setDupRefresh((n) => n + 1);
+          }}
           onPrivacyTimed={() => setPriv(true)}
         />
       )}
