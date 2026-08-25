@@ -507,6 +507,18 @@ export function Card(props: {
       <div className="card-actions-zone relative h-7 shrink-0">
         <div className="card-meta absolute inset-y-0 right-0 flex items-center gap-2.5 pr-1 font-mono text-[11px] text-fg-faint transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 tnum">
           <span title="Time captured">{timeLabel(item.created_at)}</span>
+          {/* Copy count: how many times this exact content was *captured* off the OS
+              clipboard. This is "copied", deliberately kept separate from "used" — capturing
+              something never implies you reused it. Shown only when it recurred (>= 2). */}
+          {item.copy_count >= 2 && item.reuse_count === 0 && (
+            <span
+              title={`This exact content was captured ${item.copy_count} times. Copying isn't the same as using — see "Used" once you reuse it from ClipVault.`}
+              aria-label={`Copied ${item.copy_count} times`}
+              className="shrink-0 tnum text-fg-faint"
+            >
+              Copied {item.copy_count}×
+            </span>
+          )}
           {/* Reuse count: how many times the user re-copied this FROM ClipVault — the only
               honest usage signal (pastes into other apps are unobservable, so we never
               imply them). Hidden until reused at least once, since 0 carries no info. */}

@@ -56,9 +56,11 @@ export const listItemsRange = (
     beforeCreatedAt: beforeCreatedAt ?? null,
     beforeId: beforeId ?? null,
   });
-/** Most-copied items (copy_count >= 2), ranked by frequency then recency. Top-N, not paged. */
+/** Most-*reused* items (reuse_count >= 1), ranked by usage then recency. Top-N, not paged.
+ *  "Frequent" is driven by deliberate reuse from within ClipVault, NOT by capture count —
+ *  copying something repeatedly never makes it frequent; reusing it does. */
 export const listFrequent = (limit = 100) => invoke<Item[]>("list_frequent", { limit });
-/** How many items qualify for the Frequent view (copy_count >= 2). */
+/** How many items qualify for the Frequent view (reuse_count >= 1). */
 export const frequentCount = () => invoke<number>("frequent_count");
 export const folderCounts = () => invoke<[string, number][]>("folder_counts");
 /** Apps entries were copied from, with counts — most-used first. */
