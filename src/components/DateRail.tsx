@@ -1,17 +1,26 @@
 import { Fragment, useEffect, useMemo, useRef } from "react";
 import { DateNavEntry, activeEntryIndex } from "../lib/dateNav";
+import { ChevronLeftIcon, ChevronRightIcon, TimelineIcon } from "./Icon";
+
+const RAIL_MIN = 128;
+const RAIL_MAX = 320;
 
 // A quiet chronological axis docked to the right of the timeline: a hairline
 // spine with a node per date. The node of the date currently in view glows in
 // the accent and travels as you scroll (scroll-spy); clicking any node jumps
 // the timeline to that date. `topRowIndex` is the virtualizer row at the top of
 // the viewport — the single input that keeps the highlight in sync with scroll.
+// The panel can be collapsed to a thin strip and drag-resized (issue #4).
 export function DateRail(props: {
   entries: DateNavEntry[];
   topRowIndex: number;
   onJump: (headerIndex: number) => void;
+  collapsed?: boolean;
+  width?: number;
+  onToggleCollapsed?: () => void;
+  onResize?: (width: number) => void;
 }) {
-  const { entries, topRowIndex, onJump } = props;
+  const { entries, topRowIndex, onJump, collapsed = false, width = 152 } = props;
 
   const activeIdx = useMemo(
     () => activeEntryIndex(entries, topRowIndex),
@@ -26,13 +35,81 @@ export function DateRail(props: {
     activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [active?.headerIndex]);
 
+  // Drag the panel's LEFT edge to resize (it's docked right, so leftward = wider).
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.max(RAIL_MIN, Math.min(RAIL_MAX, startW + (startX - ev.clientX)));
+      props.onResize?.(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   if (entries.length === 0) return null;
 
+  // Collapsed: a thin strip with an expand control, so the History panel can be
+  // hidden without giving up the way back to it.
+  if (collapsed) {
+    return (
+      <aside
+        aria-label="History (collapsed)"
+        className="hidden w-9 shrink-0 flex-col items-center gap-2 border-l border-border bg-bg py-2 lg:flex"
+      >
+        <button
+          onClick={props.onToggleCollapsed}
+          title="Show History panel"
+          aria-label="Show History panel"
+          className="grid h-7 w-7 place-items-center rounded-md text-fg-muted hover:bg-bg-raised hover:text-fg"
+        >
+          <ChevronLeftIcon className="h-4 w-4" />
+        </button>
+        <TimelineIcon className="h-4 w-4 text-fg-faint" />
+      </aside>
+    );
+  }
+
   return (
-    <aside
-      aria-label="Jump to date"
-      className="hidden w-[152px] shrink-0 flex-col border-l border-border bg-bg lg:flex"
-    >
+    <>
+      {/* Left-edge resize handle (flex sibling, pinned regardless of rail scroll). */}
+      {props.onResize && (
+        <div
+          onPointerDown={startResize}
+          title="Drag to resize"
+          role="separator"
+          aria-orientation="vertical"
+          className="group/resize relative z-30 -mr-1 hidden w-2 shrink-0 cursor-col-resize lg:block"
+        >
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-transparent transition-colors group-hover/resize:bg-accent/50" />
+        </div>
+      )}
+      <aside
+        aria-label="Jump to date"
+        style={{ width }}
+        className="hidden shrink-0 flex-col border-l border-border bg-bg lg:flex"
+      >
+        {/* Header: title + collapse toggle. */}
+        <div className="flex items-center justify-between px-2.5 pb-0.5 pt-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+            History
+          </span>
+          {props.onToggleCollapsed && (
+            <button
+              onClick={props.onToggleCollapsed}
+              title="Hide History panel"
+              aria-label="Hide History panel"
+              className="grid h-6 w-6 place-items-center rounded text-fg-muted hover:bg-bg-raised hover:text-fg"
+            >
+              <ChevronRightIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       {/* Pinned return-to-newest control. */}
       <button
         onClick={() => onJump(entries[0].headerIndex)}
@@ -112,7 +189,8 @@ export function DateRail(props: {
           );
         })}
       </nav>
-    </aside>
+      </aside>
+    </>
   );
 }
 

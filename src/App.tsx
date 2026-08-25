@@ -63,6 +63,7 @@ import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon, XIc
 import Duplicates from "./components/Duplicates";
 import Snippets from "./components/Snippets";
 import { loadTimeFormat } from "./lib/timeFormat";
+import { usePersistentBool, usePersistentNumber } from "./lib/uiPrefs";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
@@ -74,6 +75,11 @@ export default function App() {
   const [folder, setFolder] = useState("all");
   const [groupByDomain, setGroupByDomain] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Resizable/collapsible panel prefs (issue #4), persisted per device.
+  const [navCollapsed, setNavCollapsed] = usePersistentBool("clipvault.navCollapsed", false);
+  const [navWidth, setNavWidth] = usePersistentNumber("clipvault.navWidth", 208);
+  const [historyCollapsed, setHistoryCollapsed] = usePersistentBool("clipvault.historyCollapsed", false);
+  const [historyWidth, setHistoryWidth] = usePersistentNumber("clipvault.historyWidth", 152);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const {
     pinned,
@@ -901,6 +907,10 @@ export default function App() {
         folderDropProps={folderDropProps}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        collapsed={navCollapsed}
+        width={navWidth}
+        onToggleCollapsed={() => setNavCollapsed(!navCollapsed)}
+        onResize={setNavWidth}
       />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="flex items-center gap-1.5 border-b border-border px-2.5 py-2.5 shrink-0 sm:gap-2.5 sm:px-3.5">
@@ -1300,7 +1310,15 @@ export default function App() {
             )}
           </div>
           {!linkGrouping && (
-            <DateRail entries={dateNav} topRowIndex={topRowIndex} onJump={scrollToHeaderIndex} />
+            <DateRail
+              entries={dateNav}
+              topRowIndex={topRowIndex}
+              onJump={scrollToHeaderIndex}
+              collapsed={historyCollapsed}
+              width={historyWidth}
+              onToggleCollapsed={() => setHistoryCollapsed(!historyCollapsed)}
+              onResize={setHistoryWidth}
+            />
           )}
         </div>
           </>

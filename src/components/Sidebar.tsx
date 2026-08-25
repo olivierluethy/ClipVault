@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderDto } from "../api";
 import { FolderCreateModal, FolderDeleteModal } from "./FolderDialogs";
 import {
@@ -18,11 +18,32 @@ import {
   EditIcon,
   TrashIcon,
   GripIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "./Icon";
 
 /** dataTransfer MIME used when dragging a folder to reorder it (kept distinct from
  *  the clipboard-item drag type so the two gestures never collide on a folder row). */
 const FOLDER_DND_TYPE = "application/x-clipvault-folder";
+
+/** Min / max width the left nav may be dragged to (px). */
+const NAV_MIN = 168;
+const NAV_MAX = 360;
+
+/** True at the `md` breakpoint and up, where the sidebar is an inline panel (not the
+ *  mobile overlay drawer). Drives whether the user's collapse/resize choices apply. */
+function useIsDesktop(): boolean {
+  const [desktop, setDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = () => setDesktop(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return desktop;
+}
 
 type SysFolder = {
   id: string;
@@ -57,7 +78,9 @@ function countFor(id: string, counts: Record<string, number>): number {
 
 const USER_FOLDER_PREFIX = "user:";
 
-/** Shared row shell so system and user folders share exact rhythm and active styling. */
+/** Shared row shell so system and user folders share exact rhythm and active styling.
+ *  `rail` = collapsed icon-only mode: labels/inline-counts hide and the count moves to
+ *  a small corner badge so the section stays recognisable and countable when narrow. */
 function Row(props: {
   selected: boolean;
   onSelect: () => void;
@@ -68,6 +91,7 @@ function Row(props: {
   trailing?: React.ReactNode;
   dropProps?: React.HTMLAttributes<HTMLDivElement>;
   dropActive?: boolean;
+  rail?: boolean;
 }) {
   const hasCount = props.count !== undefined;
   return (
@@ -86,20 +110,22 @@ function Row(props: {
         <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-accent" />
       )}
       {/* Icon-rail count badge — replaces the inline count when labels are hidden. */}
-      {hasCount && props.count! > 0 && (
-        <span className="sb-rail-only pointer-events-none absolute right-1 top-0.5 rounded-full bg-bg-hover px-1 font-mono text-[9px] leading-[14px] tnum text-fg-muted">
+      {props.rail && hasCount && props.count! > 0 && (
+        <span className="pointer-events-none absolute right-1 top-0.5 rounded-full bg-bg-hover px-1 font-mono text-[9px] leading-[14px] tnum text-fg-muted">
           {props.count! > 99 ? "99+" : props.count}
         </span>
       )}
       <button
         onClick={props.onSelect}
         title={props.title}
-        className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5 text-left md:justify-center lg:justify-start"
+        className={`flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5 text-left ${
+          props.rail ? "justify-center" : "justify-start"
+        }`}
       >
         {props.children}
-        {hasCount && (
+        {!props.rail && hasCount && (
           <span
-            className={`sb-full-only ml-auto font-mono text-[11px] tnum ${
+            className={`ml-auto font-mono text-[11px] tnum ${
               props.selected ? "text-fg-muted" : "text-fg-faint"
             }`}
           >
@@ -107,7 +133,7 @@ function Row(props: {
           </span>
         )}
       </button>
-      {props.trailing}
+      {!props.rail && props.trailing}
     </div>
   );
 }
@@ -132,6 +158,7 @@ function UserFolderRow({
   dropProps,
   dropActive,
   reorder,
+  rail,
 }: {
   folder: FolderDto;
   isSelected: boolean;
@@ -141,6 +168,7 @@ function UserFolderRow({
   dropProps?: React.HTMLAttributes<HTMLDivElement>;
   dropActive?: boolean;
   reorder?: ReorderDrag;
+  rail?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(folder.name);
@@ -191,8 +219,9 @@ function UserFolderRow({
         title={folder.name}
         dropProps={dropProps}
         dropActive={dropActive}
+        rail={rail}
         trailing={
-          <div className="sb-full-only flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
             {/* Drag handle — the only element that starts a reorder drag, so plain
                 clicks on the row still select/rename without a stray drag. */}
             <span
@@ -222,7 +251,7 @@ function UserFolderRow({
         }
       >
         <FolderIcon className="h-4 w-4 shrink-0" />
-        <span className="truncate sb-full-only">{folder.name}</span>
+        {!rail && <span className="truncate">{folder.name}</span>}
       </Row>
     </div>
   );
@@ -244,6 +273,10 @@ export function Sidebar({
   folderDropProps,
   open = false,
   onClose,
+  collapsed = false,
+  width = 208,
+  onToggleCollapsed,
+  onResize,
 }: {
   counts: Record<string, number>;
   /** Count for the "Frequent" smart view; kept out of `counts` so "All" doesn't double it. */
@@ -267,7 +300,16 @@ export function Sidebar({
   /** Below `md` the sidebar is an overlay drawer; `open` controls its visibility. */
   open?: boolean;
   onClose?: () => void;
+  /** Desktop icon-rail (collapsed) mode — user-controlled via the burger toggle. */
+  collapsed?: boolean;
+  /** Expanded desktop width in px (drag-resizable). */
+  width?: number;
+  onToggleCollapsed?: () => void;
+  onResize?: (width: number) => void;
 }) {
+  const isDesktop = useIsDesktop();
+  // Rail (icon-only) mode only applies on desktop; the mobile drawer is always full.
+  const rail = collapsed && isDesktop;
   // Styled New-folder dialog (issue #15) replaces the native window.prompt.
   const [createOpen, setCreateOpen] = useState(false);
   // Folder pending a styled delete confirmation (issue #16), or null.
@@ -280,6 +322,23 @@ export function Sidebar({
   const pick = (id: string) => {
     onSelect(id);
     onClose?.();
+  };
+
+  // Drag the right edge to resize the expanded nav; persist on the way (onResize).
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.max(NAV_MIN, Math.min(NAV_MAX, startW + (ev.clientX - startX)));
+      onResize?.(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   };
 
   // Move `dragId` to `dropId`'s position and persist the whole order.
@@ -335,12 +394,29 @@ export function Sidebar({
       />
       <nav
         aria-label="Library and folders"
-        className={`fixed inset-y-0 left-0 z-50 flex w-[208px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-bg p-2 transition-transform duration-200
-          md:relative md:z-auto md:w-14 md:translate-x-0 md:shadow-none lg:w-[208px]
-          ${open ? "translate-x-0 shadow-2xl shadow-black/60" : "-translate-x-full"}`}
+        style={isDesktop ? { width: rail ? 56 : width } : undefined}
+        className={`fixed inset-y-0 left-0 z-50 flex w-[264px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-bg p-2 transition-[transform,width] duration-200
+          md:relative md:z-auto md:translate-x-0 md:shadow-none
+          ${open ? "translate-x-0 shadow-2xl shadow-black/60" : "-translate-x-full md:translate-x-0"}`}
       >
-        <div className="sb-full-only px-2.5 pb-1.5 pt-1 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
-          Library
+        {/* Header: library label + the desktop collapse/expand (burger) toggle. */}
+        <div className={`flex items-center pb-1.5 pt-1 ${rail ? "justify-center" : "justify-between px-1.5"}`}>
+          {!rail && (
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">
+              Library
+            </span>
+          )}
+          {isDesktop && onToggleCollapsed && (
+            <button
+              onClick={onToggleCollapsed}
+              title={rail ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={rail ? "Expand sidebar" : "Collapse sidebar"}
+              aria-pressed={rail}
+              className="grid h-7 w-7 place-items-center rounded-md text-fg-muted hover:bg-bg-raised hover:text-fg"
+            >
+              {rail ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}
+            </button>
+          )}
         </div>
         {SYSTEM.map((f) => {
           const Icon = f.Icon;
@@ -349,6 +425,7 @@ export function Sidebar({
               key={f.id}
               selected={selected === f.id}
               onSelect={() => pick(f.id)}
+              rail={rail}
               count={
                 f.id === "frequent"
                   ? frequentCount
@@ -361,35 +438,39 @@ export function Sidebar({
               title={f.title ?? f.label}
             >
               <Icon className={`h-4 w-4 shrink-0 ${selected === f.id ? "text-accent" : ""}`} />
-              <span className="truncate sb-full-only">{f.label}</span>
+              {!rail && <span className="truncate">{f.label}</span>}
             </Row>
           );
         })}
 
         {/* Rail divider between the two groups when labels are hidden. */}
-        <div className="sb-rail-only mx-2 my-2 h-px bg-border" />
+        {rail && <div className="mx-2 my-2 h-px bg-border" />}
 
-        <div className="mt-4 flex items-center justify-between px-2.5 pb-1 sb-full-only">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Folders</span>
+        {!rail && (
+          <div className="mt-4 flex items-center justify-between px-2.5 pb-1">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Folders</span>
+            <button
+              onClick={() => setCreateOpen(true)}
+              title="New folder"
+              className="grid h-5 w-5 place-items-center rounded text-fg-muted hover:bg-bg-raised hover:text-fg"
+            >
+              <FolderPlusIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        {/* Rail-mode new-folder affordance (the labelled header above is hidden). */}
+        {rail && (
           <button
             onClick={() => setCreateOpen(true)}
             title="New folder"
-            className="grid h-5 w-5 place-items-center rounded text-fg-muted hover:bg-bg-raised hover:text-fg"
+            className="mx-auto grid h-8 w-8 place-items-center rounded-md text-fg-muted hover:bg-bg-raised hover:text-fg"
           >
-            <FolderPlusIcon className="h-3.5 w-3.5" />
+            <FolderPlusIcon className="h-4 w-4" />
           </button>
-        </div>
-        {/* Rail-mode new-folder affordance (the labelled header above is hidden). */}
-        <button
-          onClick={() => setCreateOpen(true)}
-          title="New folder"
-          className="sb-rail-only mx-auto grid h-8 w-8 place-items-center rounded-md text-fg-muted hover:bg-bg-raised hover:text-fg"
-        >
-          <FolderPlusIcon className="h-4 w-4" />
-        </button>
+        )}
 
-        {folders.length === 0 && (
-          <div className="sb-full-only px-2.5 py-1 text-xs text-fg-faint">Drag items here or press ＋</div>
+        {!rail && folders.length === 0 && (
+          <div className="px-2.5 py-1 text-xs text-fg-faint">Drag items here or press ＋</div>
         )}
 
         {folders.map((f) => (
@@ -403,9 +484,24 @@ export function Sidebar({
             dropProps={folderDropProps?.(f.id)}
             dropActive={dropTargetId === f.id}
             reorder={reorderFor(f)}
+            rail={rail}
           />
         ))}
       </nav>
+
+      {/* Drag handle to resize the expanded desktop nav (issue #4). Sits as a flex
+          sibling at the nav's right edge, so it's pinned regardless of scroll. */}
+      {isDesktop && !rail && (
+        <div
+          onPointerDown={startResize}
+          title="Drag to resize"
+          role="separator"
+          aria-orientation="vertical"
+          className="group/resize relative z-30 -ml-1 hidden w-2 shrink-0 cursor-col-resize md:block"
+        >
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-transparent transition-colors group-hover/resize:bg-accent/50" />
+        </div>
+      )}
 
       <FolderCreateModal
         open={createOpen}

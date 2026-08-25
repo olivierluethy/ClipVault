@@ -92,6 +92,18 @@ export const MoreIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M15 6l-6 6 6 6" />
+  </Svg>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 6l6 6-6 6" />
+  </Svg>
+);
+
 /** Telephone handset — the Phone Numbers category. */
 export const PhoneIcon = (p: IconProps) => (
   <Svg {...p}>
