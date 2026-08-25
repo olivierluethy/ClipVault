@@ -92,6 +92,13 @@ export const MoreIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Telephone handset — the Phone Numbers category. */
+export const PhoneIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 5c0-.6.4-1 1-1h2.3c.5 0 .9.3 1 .8l.7 2.6c.1.4 0 .8-.3 1.1L8 9.8a11 11 0 0 0 4.2 4.2l1.3-1.3c.3-.3.7-.4 1.1-.3l2.6.7c.5.1.8.5.8 1V16c0 .6-.4 1-1 1A13 13 0 0 1 4 5Z" />
+  </Svg>
+);
+
 /** Drag-handle grip (two columns of dots) for reorderable rows. */
 export const GripIcon = (p: IconProps) => (
   <Svg {...p}>

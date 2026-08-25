@@ -90,7 +90,7 @@ pub fn process_event(
                 html: None,
             }
         }
-        ItemType::Text | ItemType::Link | ItemType::Number | ItemType::Color => {
+        ItemType::Text | ItemType::Link | ItemType::Number | ItemType::Phone | ItemType::Color => {
             let text = String::from_utf8_lossy(&ev.bytes).into_owned();
             // The user's own ignore rules get the last word on text entries.
             if let Some(rejection) = capture_rules::reject_text(storage, &text) {

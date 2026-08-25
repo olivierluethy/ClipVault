@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type Item = {
   id: string;
-  item_type: "text" | "link" | "number" | "color" | "image" | "gif" | "file";
+  item_type: "text" | "link" | "number" | "phone" | "color" | "image" | "gif" | "file";
   content: string | null;
   file_path: string | null;
   preview_path: string | null;

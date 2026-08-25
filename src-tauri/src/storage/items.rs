@@ -5,7 +5,7 @@ use super::query::{self, QueryFilters};
 use super::Storage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum ItemType { Text, Image, Gif, Link, Number, Color, File }
+pub enum ItemType { Text, Image, Gif, Link, Number, Phone, Color, File }
 
 impl ItemType {
     pub fn as_str(&self) -> &'static str {
@@ -15,6 +15,7 @@ impl ItemType {
             ItemType::Gif => "gif",
             ItemType::Link => "link",
             ItemType::Number => "number",
+            ItemType::Phone => "phone",
             ItemType::Color => "color",
             ItemType::File => "file",
         }
@@ -27,6 +28,7 @@ impl ItemType {
             "gif" => ItemType::Gif,
             "link" => ItemType::Link,
             "number" => ItemType::Number,
+            "phone" => ItemType::Phone,
             "color" => ItemType::Color,
             "file" => ItemType::File,
             _ => ItemType::Text,

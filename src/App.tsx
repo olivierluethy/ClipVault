@@ -67,7 +67,7 @@ import Snippets from "./components/Snippets";
 const DND_TYPE = "application/x-clipvault-items";
 
 // Item types whose text can be combined by Multi-Copy-Merge (images/gifs excluded).
-const MERGE_TYPES: Item["item_type"][] = ["text", "link", "number", "color"];
+const MERGE_TYPES: Item["item_type"][] = ["text", "link", "number", "phone", "color"];
 
 export default function App() {
   const [folder, setFolder] = useState("all");
@@ -419,7 +419,7 @@ export default function App() {
   );
 
   const edit = useCallback((it: Item) => {
-    if (["text", "link", "number", "color"].includes(it.item_type)) setEditingId(it.id);
+    if (["text", "link", "number", "phone", "color"].includes(it.item_type)) setEditingId(it.id);
   }, []);
 
   // Set/clear an item's self-destruct timer. `minutes` null clears it.

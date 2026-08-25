@@ -17,6 +17,7 @@ const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
   link: "URL",
   number: "NUM",
+  phone: "TEL",
   color: "HEX",
   image: "IMG",
   gif: "GIF",

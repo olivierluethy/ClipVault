@@ -25,16 +25,25 @@ import {
   FileIcon,
 } from "./Icon";
 import { looksSecret } from "../lib/secret";
+import { toCssColor, detectColorFormat } from "../lib/color";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
   link: "URL",
   number: "NUM",
+  phone: "TEL",
   color: "HEX",
   image: "IMG",
   gif: "GIF",
   file: "FILE",
 };
+
+/** The badge label for an item — for colours this reflects the actual format
+ *  (HEX / RGB / HSL / HSV / CMYK) so the original notation stays recognisable. */
+function typeCodeFor(item: Item): string {
+  if (item.item_type === "color") return detectColorFormat(item.content ?? "") ?? "HEX";
+  return TYPE_CODE[item.item_type];
+}
 
 function timeLabel(ts: number): string {
   const d = new Date(ts);
@@ -202,11 +211,14 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
   const secret = looksSecret(item.content, item.item_type);
 
   if (item.item_type === "color") {
+    // Render through the canonical parser so formats CSS can't read natively
+    // (cmyk, hsv) still show the right swatch; fall back to a checkerboard hint.
+    const css = toCssColor(item.content);
     return (
       <span className="flex min-w-0 flex-1 items-center gap-2.5">
         <span
           className="h-5 w-5 shrink-0 rounded-md border border-border-strong"
-          style={{ backgroundColor: item.content ?? "transparent" }}
+          style={{ backgroundColor: css ?? "transparent" }}
         />
         <span className="truncate font-mono text-sm text-fg">{item.content}</span>
       </span>
@@ -271,7 +283,7 @@ function Preview({ item, onZoom }: { item: Item; onZoom: () => void }) {
       </span>
     );
   }
-  if (item.item_type === "text" || item.item_type === "number") {
+  if (item.item_type === "text" || item.item_type === "number" || item.item_type === "phone") {
     if (secret) {
       return (
         <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -357,11 +369,13 @@ export function Card(props: {
     item.item_type === "text" ||
     item.item_type === "link" ||
     item.item_type === "number" ||
+    item.item_type === "phone" ||
     item.item_type === "color" ||
     item.item_type === "file";
   const canViewFull =
     (item.item_type === "text" ||
       item.item_type === "number" ||
+      item.item_type === "phone" ||
       item.item_type === "link" ||
       item.item_type === "file") &&
     !!item.content;
@@ -482,7 +496,7 @@ export function Card(props: {
 
       {/* Type code (monospace, quiet). Dropped on tight rows to protect the preview. */}
       <span className="card-typecode w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-fg-faint">
-        {TYPE_CODE[item.item_type]}
+        {typeCodeFor(item)}
       </span>
 
       <Preview item={item} onZoom={props.onZoom} />

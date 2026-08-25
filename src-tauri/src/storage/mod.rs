@@ -269,6 +269,26 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 14", [])?;
         version = 14;
     }
+    if version < 15 {
+        // Phone numbers became a distinct type, and color detection gained hsl/hsv/cmyk
+        // and 4/8-digit hex. Re-run the classifier over the text and number buckets so
+        // existing history moves into the right category (Phone / Color / Link / Number).
+        // Only text and number rows are considered, so images, files, links, snippets,
+        // and already-correct colors are never touched.
+        let rows: Vec<(String, String)> = conn
+            .prepare("SELECT id, content FROM items WHERE type IN ('text','number') AND content IS NOT NULL")?
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        for (id, content) in rows {
+            let new_type = crate::classifier::classify_text(&content);
+            conn.execute(
+                "UPDATE items SET type = ?1 WHERE id = ?2 AND type != ?1",
+                rusqlite::params![new_type.as_str(), id],
+            )?;
+        }
+        conn.execute("PRAGMA user_version = 15", [])?;
+        version = 15;
+    }
     let _ = version;
     Ok(())
 }
@@ -432,7 +452,7 @@ mod tests {
             let conn = s.conn.lock().unwrap();
             let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
             // Latest schema version — bump alongside every new migration step.
-            assert_eq!(v, 14);
+            assert_eq!(v, 15);
             let cols: Vec<String> = conn
                 .prepare("SELECT name FROM pragma_table_info('items')").unwrap()
                 .query_map([], |r| r.get::<_, String>(0)).unwrap()
@@ -446,7 +466,7 @@ mod tests {
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()
             .query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 14);
+        assert_eq!(v, 15);
     }
 
     #[test]
@@ -481,7 +501,7 @@ mod tests {
             assert_eq!(ty("b"), "link");
             assert_eq!(ty("c"), "link");
             assert_eq!(ty("d"), "color");
-            assert_eq!(ty("e"), "number");
+            assert_eq!(ty("e"), "phone"); // "+41 79 123 45 67" now detected as a phone number
             assert_eq!(ty("f"), "text");
         }
     }
