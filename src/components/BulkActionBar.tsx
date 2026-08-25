@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FolderDto } from "../api";
-import { LayersIcon } from "./Icon";
+import { LayersIcon, CheckIcon, TrashIcon, FolderPlusIcon, XIcon } from "./Icon";
 
 function FolderDropdown(props: {
   folders: FolderDto[];
@@ -200,23 +200,38 @@ export function BulkActionBar(props: {
     ? "Select at least 2 text items to merge"
     : "Select text items to merge (images can't be merged)";
 
+  // Shared button shell so every bulk action reads as one consistent, prominent group.
+  const btn =
+    "flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong bg-bg-card/60 px-2.5 py-1 text-sm text-fg transition-colors hover:border-accent/60 hover:bg-bg-card";
+
   return (
-    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-bg-raised px-3 py-2 shrink-0 sm:px-4">
-      <span className="shrink-0 text-sm font-medium text-fg">{props.count} selected</span>
+    // An accent-tinted bar with a left accent rail makes the selection state
+    // unmistakable (issue #10, stories 4 & 8).
+    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-accent/40 bg-accent-dim/30 px-3 py-2 shrink-0 sm:px-4">
+      <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent" aria-hidden />
+
+      {/* Selection state — a prominent accent badge, not a quiet label. */}
+      <span className="mr-1 inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent/15 px-2 py-1 text-sm font-semibold text-accent">
+        <CheckIcon className="h-4 w-4" />
+        {props.count} selected
+      </span>
+
       {props.count < props.total && (
-        <button
-          onClick={props.onSelectAll}
-          className="shrink-0 rounded px-2 py-1 text-sm text-accent hover:underline"
-        >
+        <button onClick={props.onSelectAll} className={btn}>
+          <LayersIcon className="h-4 w-4" />
           Select all {props.total}
         </button>
       )}
+
+      {/* Thin divider between "what's selected" and "what you can do with it". */}
+      <span className="mx-1 hidden h-5 w-px shrink-0 bg-accent/30 sm:block" aria-hidden />
+
       <div className="relative shrink-0">
         <button
           onClick={() => canMerge && setMergeMenuOpen((v) => !v)}
           disabled={!canMerge}
           title={mergeTitle}
-          className="flex items-center gap-1.5 whitespace-nowrap rounded border border-border px-2 py-1 text-sm text-fg hover:bg-bg-card disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          className={`${btn} disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border-strong disabled:hover:bg-bg-card/60`}
         >
           <LayersIcon className="h-4 w-4" />
           Merge{canMerge ? ` ${props.mergeableCount}` : ""} ▾
@@ -231,10 +246,8 @@ export function BulkActionBar(props: {
         )}
       </div>
       <div className="relative shrink-0">
-        <button
-          onClick={() => setFolderMenuOpen((v) => !v)}
-          className="whitespace-nowrap rounded border border-border px-2 py-1 text-sm text-fg hover:bg-bg-card"
-        >
+        <button onClick={() => setFolderMenuOpen((v) => !v)} className={btn}>
+          <FolderPlusIcon className="h-4 w-4" />
           Add to folder ▾
         </button>
         {folderMenuOpen && (
@@ -247,14 +260,20 @@ export function BulkActionBar(props: {
       </div>
       <button
         onClick={props.onDelete}
-        className="shrink-0 whitespace-nowrap rounded border border-border px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-red-400"
+        className={`${btn} hover:border-red-500/60 hover:text-red-300`}
       >
-        Delete selected
+        <TrashIcon className="h-4 w-4" />
+        Delete
       </button>
+
+      {/* Clear selection sits WITH the other controls (not floated away) and is a real
+          bordered button so it's easy to find — issue #10, stories 1 & 3. */}
       <button
         onClick={props.onClear}
-        className="ml-auto shrink-0 whitespace-nowrap rounded px-2 py-1 text-sm text-fg-muted hover:bg-bg-card hover:text-fg"
+        title="Deselect all (Esc)"
+        className={`${btn} text-fg-muted`}
       >
+        <XIcon className="h-4 w-4" />
         Clear selection
       </button>
     </div>

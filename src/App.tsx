@@ -653,6 +653,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", h);
   }, [selectAll]);
 
+  // Escape clears an active multi-selection (unless a text field or modal owns it),
+  // so getting out of selection mode is always one obvious keystroke (issue #10).
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (selectedIds.size > 0) clearSelection();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [selectedIds, clearSelection]);
+
   // ─── Drag items → user folders (Task 6). Dragging a selected row drags the whole
   // selection; only user folders are drop targets. ────────────────────────────────
   const handleItemDragStart = useCallback(
