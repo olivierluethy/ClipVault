@@ -398,6 +398,7 @@ pub fn run() {
             crate::ipc::rename_folder,
             crate::ipc::delete_folder,
             crate::ipc::list_folders,
+            crate::ipc::reorder_folders,
             crate::ipc::assign_item,
             crate::ipc::unassign_item,
             crate::ipc::folders_for_item,

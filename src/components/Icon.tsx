@@ -92,6 +92,18 @@ export const MoreIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Drag-handle grip (two columns of dots) for reorderable rows. */
+export const GripIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9" cy="6" r="1.3" />
+    <circle cx="15" cy="6" r="1.3" />
+    <circle cx="9" cy="12" r="1.3" />
+    <circle cx="15" cy="12" r="1.3" />
+    <circle cx="9" cy="18" r="1.3" />
+    <circle cx="15" cy="18" r="1.3" />
+  </Svg>
+);
+
 export const CheckIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M5 12.5 10 17.5 19.5 6.5" />

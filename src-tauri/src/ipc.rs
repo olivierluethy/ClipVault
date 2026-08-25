@@ -330,6 +330,11 @@ pub fn list_folders(state: State<AppState>) -> Result<Vec<FolderDto>, String> {
 }
 
 #[tauri::command]
+pub fn reorder_folders(state: State<AppState>, ids: Vec<String>) -> Result<(), String> {
+    state.storage.reorder_folders(&ids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn assign_item(state: State<AppState>, item_id: String, folder_id: String) -> Result<(), String> {
     state.storage.assign_item(&item_id, &folder_id).map_err(|e| e.to_string())
 }

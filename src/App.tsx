@@ -26,6 +26,7 @@ import {
   createFolder,
   renameFolder,
   deleteFolder,
+  reorderFolders,
   assignItem,
   unassignItem,
   foldersForItem,
@@ -336,6 +337,22 @@ export default function App() {
       reload();
     },
     [folder, reloadFolders, reloadCounts, reload]
+  );
+
+  const handleReorderFolders = useCallback(
+    async (ids: string[]) => {
+      // Optimistically reorder local state so the drag lands without a flash, then
+      // persist. A reload afterwards reconciles with the stored sort_order.
+      setFolders((prev) => {
+        const byId = new Map(prev.map((f) => [f.id, f]));
+        const next = ids.map((id) => byId.get(id)).filter((f): f is FolderDto => !!f);
+        for (const f of prev) if (!ids.includes(f.id)) next.push(f);
+        return next;
+      });
+      await reorderFolders(ids);
+      reloadFolders();
+    },
+    [reloadFolders]
   );
 
   // A deliberate reuse (Copy / row-click) bumped the item's reuse_count in the DB —
@@ -857,6 +874,7 @@ export default function App() {
         onCreateFolder={handleCreateFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
+        onReorderFolders={handleReorderFolders}
         dropTargetId={dropTargetId}
         folderDropProps={folderDropProps}
         open={sidebarOpen}

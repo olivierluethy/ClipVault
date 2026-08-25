@@ -689,8 +689,8 @@ mod tests {
     #[test]
     fn list_recent_orders_newest_first() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,preview_path:None,content_hash:"a".into()},100).unwrap();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("b".into()),file_path:None,preview_path:None,content_hash:"b".into()},200).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,preview_path:None,content_hash:"a".into(),source_app:None,html:None},100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("b".into()),file_path:None,preview_path:None,content_hash:"b".into(),source_app:None,html:None},200).unwrap();
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].content.as_deref(), Some("b"));
         assert_eq!(rows[1].content.as_deref(), Some("a"));
@@ -700,7 +700,7 @@ mod tests {
     fn list_items_pages_excludes_pinned_and_deleted() {
         let (_d, s) = storage();
         let mk = |c: &str, hash: &str, t: i64| s.insert_or_bump(
-            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, preview_path:None, content_hash:hash.into()}, t).unwrap();
+            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, preview_path:None, content_hash:hash.into(),source_app:None,html:None}, t).unwrap();
         mk("a","ha",100); mk("b","hb",200); mk("c","hc",300);
         // page 1: newest first
         let p1 = s.list_items(2, None, None).unwrap();
@@ -721,7 +721,7 @@ mod tests {
         let (_d, s) = storage();
         // three items with the SAME created_at (ties)
         for (c, h) in [("a","ha"),("b","hb"),("c","hc")] {
-            s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some(c.into()),file_path:None,preview_path:None,content_hash:h.into()}, 500).unwrap();
+            s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some(c.into()),file_path:None,preview_path:None,content_hash:h.into(),source_app:None,html:None}, 500).unwrap();
         }
         let mut seen = Vec::new();
         let mut cursor: Option<(i64, String)> = None;
@@ -746,6 +746,7 @@ mod tests {
         let mk = |c: &str, h: &str| NewItem {
             item_type: ItemType::Text, content: Some(c.into()),
             file_path: None, preview_path: None, content_hash: h.into(),
+            source_app: None, html: None,
         };
         // Capture the same content twice (passive dedup): copy_count rises, reuse stays 0.
         s.insert_or_bump(mk("captured-twice", "h1"), 100).unwrap();
@@ -774,6 +775,7 @@ mod tests {
         let mk = |c: &str, h: &str| NewItem {
             item_type: ItemType::Text, content: Some(c.into()),
             file_path: None, preview_path: None, content_hash: h.into(),
+            source_app: None, html: None,
         };
         let id = |c: &str| s.list_items(50, None, None).unwrap()
             .into_iter().find(|i| i.content.as_deref() == Some(c)).unwrap().id;
@@ -808,7 +810,7 @@ mod tests {
     #[test]
     fn soft_delete_hides_then_restore_then_purge() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("x".into()),file_path:None,preview_path:None,content_hash:"hx".into()},100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("x".into()),file_path:None,preview_path:None,content_hash:"hx".into(),source_app:None,html:None},100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.soft_delete(&id, 500).unwrap();
         assert_eq!(s.list_items(10, None, None).unwrap().len(), 0);   // hidden
@@ -826,12 +828,12 @@ mod tests {
     #[test]
     fn recopy_undeletes_soft_deleted_item() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,preview_path:None,content_hash:"hz".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,preview_path:None,content_hash:"hz".into(),source_app:None,html:None}, 100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.soft_delete(&id, 200).unwrap();
         assert_eq!(s.list_items(10, None, None).unwrap().len(), 0); // hidden
         // re-copy same content -> should reappear (un-deleted) and bump
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,preview_path:None,content_hash:"hz".into()}, 300).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("z".into()),file_path:None,preview_path:None,content_hash:"hz".into(),source_app:None,html:None}, 300).unwrap();
         let rows = s.list_items(10, None, None).unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].copy_count >= 2);
@@ -840,7 +842,7 @@ mod tests {
     #[test]
     fn get_item_returns_fields() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("q".into()),file_path:None,preview_path:None,content_hash:"hq".into()},1).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("q".into()),file_path:None,preview_path:None,content_hash:"hq".into(),source_app:None,html:None},1).unwrap();
         let id = s.list_items(10,None,None).unwrap()[0].id.clone();
         let got = s.get_item(&id).unwrap().unwrap();
         assert_eq!(got.0, "text"); assert_eq!(got.1.as_deref(), Some("q")); assert_eq!(got.3, "hq");
@@ -849,7 +851,7 @@ mod tests {
     #[test]
     fn set_metadata_persists_json() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Link,content:Some("https://example.com".into()),file_path:None,preview_path:None,content_hash:"hl".into()},1).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Link,content:Some("https://example.com".into()),file_path:None,preview_path:None,content_hash:"hl".into(),source_app:None,html:None},1).unwrap();
         let id = s.list_items(10,None,None).unwrap()[0].id.clone();
         assert_eq!(s.list_items(10,None,None).unwrap()[0].metadata, None);
         s.set_metadata(&id, r#"{"title":"Example","favicon_url":"https://example.com/favicon.ico"}"#).unwrap();
@@ -866,7 +868,7 @@ mod tests {
     #[test]
     fn update_content_changes_text_and_updated_at() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("old".into()),file_path:None,preview_path:None,content_hash:"he".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("old".into()),file_path:None,preview_path:None,content_hash:"he".into(),source_app:None,html:None}, 100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.update_content(&id, "new value", 500).unwrap();
         let row = s.list_items(10, None, None).unwrap().into_iter().next().unwrap();
@@ -877,7 +879,7 @@ mod tests {
     #[test]
     fn set_pinned_toggles() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("p".into()),file_path:None,preview_path:None,content_hash:"hp".into()},100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("p".into()),file_path:None,preview_path:None,content_hash:"hp".into(),source_app:None,html:None},100).unwrap();
         let id = s.list_items(10,None,None).unwrap()[0].id.clone();
         s.set_pinned(&id, true).unwrap();
         assert_eq!(s.list_pinned().unwrap().len(), 1);
@@ -888,7 +890,7 @@ mod tests {
     #[test]
     fn list_by_type_filters_and_includes_pinned() {
         let (_d, s) = storage();
-        let mk = |ty: ItemType, c: &str, h: &str, t: i64| s.insert_or_bump(NewItem{item_type:ty,content:Some(c.into()),file_path:None,preview_path:None,content_hash:h.into()}, t).unwrap();
+        let mk = |ty: ItemType, c: &str, h: &str, t: i64| s.insert_or_bump(NewItem{item_type:ty,content:Some(c.into()),file_path:None,preview_path:None,content_hash:h.into(),source_app:None,html:None}, t).unwrap();
         mk(ItemType::Text,"a","ha",100);
         mk(ItemType::Link,"https://x","hb",200);
         mk(ItemType::Link,"https://y","hc",300);
@@ -905,8 +907,8 @@ mod tests {
     #[test]
     fn folder_counts_groups_by_type() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,preview_path:None,content_hash:"ha".into()},1).unwrap();
-        s.insert_or_bump(NewItem{item_type:ItemType::Color,content:Some("#fff".into()),file_path:None,preview_path:None,content_hash:"hb".into()},2).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("a".into()),file_path:None,preview_path:None,content_hash:"ha".into(),source_app:None,html:None},1).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Color,content:Some("#fff".into()),file_path:None,preview_path:None,content_hash:"hb".into(),source_app:None,html:None},2).unwrap();
         let counts: std::collections::HashMap<String,i64> = s.folder_counts().unwrap().into_iter().collect();
         assert_eq!(counts.get("text"), Some(&1));
         assert_eq!(counts.get("color"), Some(&1));
@@ -916,7 +918,7 @@ mod tests {
     fn search_finds_matching_items_by_content() {
         let (_d, s) = storage();
         let mk = |c: &str, h: &str, t: i64| s.insert_or_bump(
-            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, preview_path:None, content_hash:h.into()}, t).unwrap();
+            NewItem{item_type:ItemType::Text, content:Some(c.into()), file_path:None, preview_path:None, content_hash:h.into(),source_app:None,html:None}, t).unwrap();
         mk("hello world", "h1", 100);
         mk("the quick brown fox", "h2", 200);
         mk("a link https://rust-lang.org", "h3", 300);
@@ -938,7 +940,7 @@ mod tests {
     #[test]
     fn search_empty_query_returns_empty() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello".into()),file_path:None,preview_path:None,content_hash:"h1".into(),source_app:None,html:None}, 100).unwrap();
         assert!(s.search("", 10).unwrap().is_empty());
         assert!(s.search("   ", 10).unwrap().is_empty());
     }
@@ -946,7 +948,7 @@ mod tests {
     #[test]
     fn search_excludes_soft_deleted_items() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello world".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello world".into()),file_path:None,preview_path:None,content_hash:"h1".into(),source_app:None,html:None}, 100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.soft_delete(&id, 200).unwrap();
         assert!(s.search("hello", 10).unwrap().is_empty());
@@ -955,7 +957,7 @@ mod tests {
     #[test]
     fn search_reflects_updated_content() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("old value".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("old value".into()),file_path:None,preview_path:None,content_hash:"h1".into(),source_app:None,html:None}, 100).unwrap();
         let id = s.list_items(10, None, None).unwrap()[0].id.clone();
         s.update_content(&id, "brand new phrase", 200).unwrap();
         assert!(s.search("old", 10).unwrap().is_empty());
@@ -967,7 +969,7 @@ mod tests {
     #[test]
     fn search_handles_fts_special_characters_without_error() {
         let (_d, s) = storage();
-        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello world".into()),file_path:None,preview_path:None,content_hash:"h1".into()}, 100).unwrap();
+        s.insert_or_bump(NewItem{item_type:ItemType::Text,content:Some("hello world".into()),file_path:None,preview_path:None,content_hash:"h1".into(),source_app:None,html:None}, 100).unwrap();
         // Adversarial inputs that would break a naive FTS5 query must not error.
         for q in ["\"", "a OR b", "NEAR(x y)", "foo*", "-bar", "\" OR items_fts MATCH \"x"] {
             let res = s.search(q, 10);

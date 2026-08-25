@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn stores_text_event() {
         let (_d, s) = storage();
-        let out = process_event(&s, ClipEvent::new("UTF8_STRING".into(), b"hello".to_vec()), &std::sync::Mutex::new(None)).unwrap();
+        let out = process_event(&s, ClipEvent::new("UTF8_STRING", b"hello".to_vec()), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Capture::Stored(InsertOutcome::Inserted(_))));
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].content.as_deref(), Some("hello"));
@@ -156,7 +156,7 @@ mod tests {
     fn stores_image_as_file() {
         let (_d, s) = storage();
         let png = b"\x89PNG\r\n\x1a\nDATA".to_vec();
-        let out = process_event(&s, ClipEvent::new("image/png".into(), png.clone()), &std::sync::Mutex::new(None)).unwrap();
+        let out = process_event(&s, ClipEvent::new("image/png", png.clone()), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Capture::Stored(InsertOutcome::Inserted(_))));
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].item_type, "image");
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn link_text_stored_as_link_type() {
         let (_d, s) = storage();
-        let out = process_event(&s, ClipEvent::new("UTF8_STRING".into(), b"https://example.com/x".to_vec()), &std::sync::Mutex::new(None)).unwrap();
+        let out = process_event(&s, ClipEvent::new("UTF8_STRING", b"https://example.com/x".to_vec()), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Capture::Stored(InsertOutcome::Inserted(_))));
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].item_type, "link");
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn text_event_has_no_preview_path() {
         let (_d, s) = storage();
-        process_event(&s, ClipEvent::new("UTF8_STRING".into(), b"hello".to_vec()), &std::sync::Mutex::new(None)).unwrap();
+        process_event(&s, ClipEvent::new("UTF8_STRING", b"hello".to_vec()), &std::sync::Mutex::new(None)).unwrap();
         let rows = s.list_recent(10).unwrap();
         assert_eq!(rows[0].preview_path, None);
     }
@@ -201,7 +201,7 @@ mod tests {
             if bits >= 8 { bits -= 8; png.push((buf >> bits) as u8); }
         }
 
-        let out = process_event(&s, ClipEvent::new("image/png".into(), png), &std::sync::Mutex::new(None)).unwrap();
+        let out = process_event(&s, ClipEvent::new("image/png", png), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Capture::Stored(InsertOutcome::Inserted(_))));
         let rows = s.list_recent(10).unwrap();
         let preview = rows[0].preview_path.clone().expect("preview_path should be set");
@@ -213,7 +213,7 @@ mod tests {
     fn oversized_text_skipped() {
         let (_d, s) = storage();
         let big = vec![b'a'; MAX_TEXT + 1];
-        let out = process_event(&s, ClipEvent::new("UTF8_STRING".into(), big), &std::sync::Mutex::new(None)).unwrap();
+        let out = process_event(&s, ClipEvent::new("UTF8_STRING", big), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(out, Capture::Skipped(_)));
         assert_eq!(s.list_recent(10).unwrap().len(), 0);
     }
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn duplicate_bumps_not_inserts() {
         let (_d, s) = storage();
-        let ev = || ClipEvent::new("UTF8_STRING".into(), b"x".to_vec());
+        let ev = || ClipEvent::new("UTF8_STRING", b"x".to_vec());
         process_event(&s, ev(), &std::sync::Mutex::new(None)).unwrap();
         let second = process_event(&s, ev(), &std::sync::Mutex::new(None)).unwrap();
         assert!(matches!(second, Capture::Stored(InsertOutcome::Bumped(_))));
@@ -236,7 +236,7 @@ mod tests {
         let marker = std::sync::Mutex::new(Some(hash.clone()));
 
         // First echo: suppressed.
-        let out = process_event(&s, ClipEvent::new("UTF8_STRING".into(), bytes.clone()), &marker).unwrap();
+        let out = process_event(&s, ClipEvent::new("UTF8_STRING", bytes.clone()), &marker).unwrap();
         assert!(matches!(out, Capture::SelfCopy), "self-copy should be suppressed, not stored");
         assert_eq!(*marker.lock().unwrap(), Some(hash), "marker must persist to suppress repeated echoes");
 
@@ -251,7 +251,7 @@ mod tests {
         let (_d, s) = storage();
         let marker = std::sync::Mutex::new(Some(sha256_hex(b"OUR COPY")));
         // A genuinely different clipboard change clears the marker and is captured.
-        let out = process_event(&s, ClipEvent::new("UTF8_STRING".into(), b"something else".to_vec()), &marker).unwrap();
+        let out = process_event(&s, ClipEvent::new("UTF8_STRING", b"something else".to_vec()), &marker).unwrap();
         assert!(matches!(out, Capture::Stored(InsertOutcome::Inserted(_))));
         assert_eq!(*marker.lock().unwrap(), None, "different content should clear the stale marker");
         assert_eq!(s.list_recent(10).unwrap().len(), 1);

@@ -31,6 +31,23 @@ impl Storage {
         Ok(())
     }
 
+    /// Persist a user-chosen folder order. `ordered_ids` is every folder id in the
+    /// desired top-to-bottom order; each folder's `sort_order` becomes its index, so
+    /// `list_folders` (ordered by `sort_order`) returns them exactly as arranged.
+    /// Applied in a single transaction so a drag can never leave the order half-written.
+    pub fn reorder_folders(&self, ordered_ids: &[String]) -> rusqlite::Result<()> {
+        let mut guard = self.conn.lock().unwrap();
+        let tx = guard.transaction()?;
+        for (idx, id) in ordered_ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE folders SET sort_order = ?1 WHERE id = ?2",
+                params![idx as i64, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn delete_folder(&self, id: &str, delete_items: bool, now: i64) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         if delete_items {
@@ -252,6 +269,28 @@ mod tests {
         s.rename_folder(&fid, "Renamed").unwrap();
         let folders = s.list_folders().unwrap();
         assert_eq!(folders[0].name, "Renamed");
+    }
+
+    #[test]
+    fn reorder_folders_persists_new_order() {
+        let (_d, s) = storage();
+        let a = s.create_folder("A", 100).unwrap();
+        let b = s.create_folder("B", 200).unwrap();
+        let c = s.create_folder("C", 300).unwrap();
+        // Initial creation order is A, B, C.
+        assert_eq!(
+            s.list_folders().unwrap().iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+            vec!["A", "B", "C"]
+        );
+        // Drag C to the top: C, A, B.
+        s.reorder_folders(&[c.clone(), a.clone(), b.clone()]).unwrap();
+        assert_eq!(
+            s.list_folders().unwrap().iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+            vec!["C", "A", "B"]
+        );
+        // The order survives a reopen would be covered by list ordering by sort_order;
+        // here we re-assert it is stable when queried again.
+        assert_eq!(s.list_folders().unwrap()[0].id, c);
     }
 
     #[test]

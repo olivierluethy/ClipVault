@@ -99,6 +99,8 @@ export const createFolder = (name: string) => invoke<string>("create_folder", { 
 export const renameFolder = (id: string, name: string) => invoke<void>("rename_folder", { id, name });
 export const deleteFolder = (id: string, deleteItems: boolean) =>
   invoke<void>("delete_folder", { id, deleteItems });
+/** Persist a user-chosen folder order; `ids` lists every folder top-to-bottom. */
+export const reorderFolders = (ids: string[]) => invoke<void>("reorder_folders", { ids });
 export const assignItem = (itemId: string, folderId: string) =>
   invoke<void>("assign_item", { itemId, folderId });
 export const unassignItem = (itemId: string, folderId: string) =>

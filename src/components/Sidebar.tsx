@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FolderDto } from "../api";
+import { FolderCreateModal, FolderDeleteModal } from "./FolderDialogs";
 import {
   LayersIcon,
   TextIcon,
@@ -15,7 +16,12 @@ import {
   FolderPlusIcon,
   EditIcon,
   TrashIcon,
+  GripIcon,
 } from "./Icon";
+
+/** dataTransfer MIME used when dragging a folder to reorder it (kept distinct from
+ *  the clipboard-item drag type so the two gestures never collide on a folder row). */
+const FOLDER_DND_TYPE = "application/x-clipvault-folder";
 
 type SysFolder = {
   id: string;
@@ -104,6 +110,17 @@ function Row(props: {
   );
 }
 
+type ReorderDrag = {
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  /** This folder is the one being dragged. */
+  isDragging: boolean;
+  /** A dragged folder is hovering over this one — show the drop indicator. */
+  isOver: boolean;
+};
+
 function UserFolderRow({
   folder,
   isSelected,
@@ -112,6 +129,7 @@ function UserFolderRow({
   onDelete,
   dropProps,
   dropActive,
+  reorder,
 }: {
   folder: FolderDto;
   isSelected: boolean;
@@ -120,6 +138,7 @@ function UserFolderRow({
   onDelete: () => void;
   dropProps?: React.HTMLAttributes<HTMLDivElement>;
   dropActive?: boolean;
+  reorder?: ReorderDrag;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(folder.name);
@@ -154,35 +173,56 @@ function UserFolderRow({
   }
 
   return (
-    <Row
-      selected={isSelected}
-      onSelect={onSelect}
-      count={folder.item_count}
-      title={folder.name}
-      dropProps={dropProps}
-      dropActive={dropActive}
-      trailing={
-        <div className="sb-full-only flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            onClick={() => setEditing(true)}
-            title="Rename folder"
-            className="grid h-6 w-6 place-items-center rounded text-fg-muted hover:bg-bg-hover hover:text-fg"
-          >
-            <EditIcon className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={onDelete}
-            title="Delete folder"
-            className="grid h-6 w-6 place-items-center rounded text-fg-muted hover:bg-bg-hover hover:text-red-300"
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      }
+    <div
+      className={`relative ${reorder?.isDragging ? "opacity-40" : ""}`}
+      onDragOver={reorder?.onDragOver}
+      onDrop={reorder?.onDrop}
     >
-      <FolderIcon className="h-4 w-4 shrink-0" />
-      <span className="truncate sb-full-only">{folder.name}</span>
-    </Row>
+      {/* Drop indicator: a bar showing where the dragged folder will land. */}
+      {reorder?.isOver && (
+        <span className="pointer-events-none absolute -top-0.5 left-1 right-1 z-10 h-0.5 rounded-full bg-accent" />
+      )}
+      <Row
+        selected={isSelected}
+        onSelect={onSelect}
+        count={folder.item_count}
+        title={folder.name}
+        dropProps={dropProps}
+        dropActive={dropActive}
+        trailing={
+          <div className="sb-full-only flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Drag handle — the only element that starts a reorder drag, so plain
+                clicks on the row still select/rename without a stray drag. */}
+            <span
+              draggable
+              onDragStart={reorder?.onDragStart}
+              onDragEnd={reorder?.onDragEnd}
+              title="Drag to reorder"
+              className="grid h-6 w-5 cursor-grab place-items-center text-fg-faint hover:text-fg-muted active:cursor-grabbing"
+            >
+              <GripIcon className="h-3.5 w-3.5" />
+            </span>
+            <button
+              onClick={() => setEditing(true)}
+              title="Rename folder"
+              className="grid h-6 w-6 place-items-center rounded text-fg-muted hover:bg-bg-hover hover:text-fg"
+            >
+              <EditIcon className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onDelete}
+              title="Delete folder"
+              className="grid h-6 w-6 place-items-center rounded text-fg-muted hover:bg-bg-hover hover:text-red-300"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        }
+      >
+        <FolderIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate sb-full-only">{folder.name}</span>
+      </Row>
+    </div>
   );
 }
 
@@ -197,6 +237,7 @@ export function Sidebar({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onReorderFolders,
   dropTargetId,
   folderDropProps,
   open = false,
@@ -215,6 +256,8 @@ export function Sidebar({
   onCreateFolder: (name: string) => void;
   onRenameFolder: (id: string, name: string) => void;
   onDeleteFolder: (id: string, deleteItems: boolean) => void;
+  /** Persist a new top-to-bottom folder order after a drag-reorder. */
+  onReorderFolders: (ids: string[]) => void;
   /** Id of the user folder currently highlighted as a drag drop-target (Task 6). */
   dropTargetId?: string | null;
   /** Factory returning drag drop-handlers for a given user folder id (Task 6). */
@@ -223,24 +266,60 @@ export function Sidebar({
   open?: boolean;
   onClose?: () => void;
 }) {
-  const handleCreate = () => {
-    const name = window.prompt("New folder name");
-    const trimmed = name?.trim();
-    if (trimmed) onCreateFolder(trimmed);
-  };
-
-  const handleDelete = (folder: FolderDto) => {
-    const deleteItems = window.confirm(
-      `Delete folder "${folder.name}"?\n\nOK = delete folder AND its items\nCancel = delete folder only (keep items)`
-    );
-    onDeleteFolder(folder.id, deleteItems);
-  };
+  // Styled New-folder dialog (issue #15) replaces the native window.prompt.
+  const [createOpen, setCreateOpen] = useState(false);
+  // Folder pending a styled delete confirmation (issue #16), or null.
+  const [deleteTarget, setDeleteTarget] = useState<FolderDto | null>(null);
+  // Drag-to-reorder state: the folder being dragged and the one it's hovering over.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   // On narrow layouts the sidebar is a drawer; picking a destination closes it.
   const pick = (id: string) => {
     onSelect(id);
     onClose?.();
   };
+
+  // Move `dragId` to `dropId`'s position and persist the whole order.
+  const commitReorder = (dragId: string, dropId: string) => {
+    const ids = folders.map((f) => f.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(dropId);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = ids.slice();
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    onReorderFolders(next);
+  };
+
+  const reorderFor = (folder: FolderDto): ReorderDrag => ({
+    isDragging: dragId === folder.id,
+    isOver: dragId !== null && overId === folder.id && dragId !== folder.id,
+    onDragStart: (e) => {
+      e.dataTransfer.setData(FOLDER_DND_TYPE, folder.id);
+      e.dataTransfer.effectAllowed = "move";
+      setDragId(folder.id);
+    },
+    onDragEnd: () => {
+      setDragId(null);
+      setOverId(null);
+    },
+    onDragOver: (e) => {
+      // Only react to a folder-reorder drag, never a clipboard-item drag.
+      if (!e.dataTransfer.types.includes(FOLDER_DND_TYPE)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setOverId(folder.id);
+    },
+    onDrop: (e) => {
+      if (!e.dataTransfer.types.includes(FOLDER_DND_TYPE)) return;
+      e.preventDefault();
+      const from = e.dataTransfer.getData(FOLDER_DND_TYPE);
+      if (from) commitReorder(from, folder.id);
+      setDragId(null);
+      setOverId(null);
+    },
+  });
 
   return (
     <>
@@ -291,7 +370,7 @@ export function Sidebar({
         <div className="mt-4 flex items-center justify-between px-2.5 pb-1 sb-full-only">
           <span className="font-mono text-[10px] uppercase tracking-wider text-fg-faint">Folders</span>
           <button
-            onClick={handleCreate}
+            onClick={() => setCreateOpen(true)}
             title="New folder"
             className="grid h-5 w-5 place-items-center rounded text-fg-muted hover:bg-bg-raised hover:text-fg"
           >
@@ -300,7 +379,7 @@ export function Sidebar({
         </div>
         {/* Rail-mode new-folder affordance (the labelled header above is hidden). */}
         <button
-          onClick={handleCreate}
+          onClick={() => setCreateOpen(true)}
           title="New folder"
           className="sb-rail-only mx-auto grid h-8 w-8 place-items-center rounded-md text-fg-muted hover:bg-bg-raised hover:text-fg"
         >
@@ -318,12 +397,24 @@ export function Sidebar({
             isSelected={selected === `${USER_FOLDER_PREFIX}${f.id}`}
             onSelect={() => pick(`${USER_FOLDER_PREFIX}${f.id}`)}
             onRename={(name) => onRenameFolder(f.id, name)}
-            onDelete={() => handleDelete(f)}
+            onDelete={() => setDeleteTarget(f)}
             dropProps={folderDropProps?.(f.id)}
             dropActive={dropTargetId === f.id}
+            reorder={reorderFor(f)}
           />
         ))}
       </nav>
+
+      <FolderCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreate={onCreateFolder}
+      />
+      <FolderDeleteModal
+        folder={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={(id, deleteItems) => onDeleteFolder(id, deleteItems)}
+      />
     </>
   );
 }
