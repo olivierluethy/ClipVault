@@ -75,7 +75,13 @@ export default function App() {
   const [groupByDomain, setGroupByDomain] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
-  const { pinned, rows: folderRows, flatItems: folderFlatItems, reload, loadMore } = useTimeline(folder, dateRange);
+  const {
+    pinned,
+    rows: folderRows,
+    flatItems: folderFlatItems,
+    reload,
+    loading: historyLoading,
+  } = useTimeline(folder, dateRange);
   const [privacy, setPriv] = useState(false);
   const [quickMsg, setQuickMsg] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -826,15 +832,8 @@ export default function App() {
     overscan: 8,
   });
 
-  useEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 400) loadMore();
-    };
-    el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [loadMore]);
+  // The complete history is loaded eagerly by useTimeline now (issue #6), so there is
+  // no scroll-to-load-more — the timeline and its date navigation are whole up front.
 
   // Date-navigation rail: derive the ordered date groups from the timeline rows,
   // and expose a single smooth-scroll used by both the rail and the header
@@ -865,7 +864,11 @@ export default function App() {
     flashMessage(added ? "Added current clipboard ✓" : "Clipboard empty — nothing to add");
   }, [flashMessage]);
 
-  const isEmpty = isSearching ? rows.length === 0 : rows.length === 0 && pinned.length === 0;
+  // While the full history is still loading, don't flash the "nothing captured" empty
+  // state — an empty list then is "not loaded yet", not "genuinely empty" (issue #6).
+  const isEmpty = isSearching
+    ? rows.length === 0
+    : !historyLoading && rows.length === 0 && pinned.length === 0;
 
   // Scroll-spy input: the virtualizer row currently at the top of the viewport.
   // Recomputed each render — the virtualizer re-renders as its window shifts, so
@@ -1053,6 +1056,34 @@ export default function App() {
               Clear
             </button>
           </div>
+        )}
+
+        {/* History load state (issue #6): clear feedback while the COMPLETE history is
+            being pulled, then a range indicator so the full extent is obvious without
+            scrolling to discover it. Hidden for the ranked Frequent view (no timeline). */}
+        {!isSearching && folder !== "frequent" && (
+          historyLoading ? (
+            <div className="flex items-center gap-2 border-b border-border px-4 py-1.5 shrink-0 text-xs text-fg-muted">
+              <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-fg-faint border-t-accent" />
+              Loading complete history… {folderFlatItems.length > 0 && `(${folderFlatItems.length} loaded)`}
+            </div>
+          ) : (
+            folderFlatItems.length > 0 && (
+              <div className="flex items-center gap-1.5 border-b border-border px-4 py-1.5 shrink-0 font-mono text-[11px] text-fg-faint">
+                <span className="tnum text-fg-muted">{folderFlatItems.length}</span>
+                <span>{folderFlatItems.length === 1 ? "entry" : "entries"} · complete history loaded</span>
+                {(() => {
+                  const oldest = folderFlatItems[folderFlatItems.length - 1]?.created_at;
+                  if (!oldest) return null;
+                  const label = new Date(oldest).toLocaleDateString(undefined, {
+                    month: "short",
+                    year: "numeric",
+                  });
+                  return <span>· since {label}</span>;
+                })()}
+              </div>
+            )
+          )
         )}
 
         {!isSearching && !dateRange && folder === "link" && (
