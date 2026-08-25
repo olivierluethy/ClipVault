@@ -67,6 +67,33 @@ export const folderCounts = () => invoke<[string, number][]>("folder_counts");
 export const listSourceApps = () => invoke<[string, number][]>("list_source_apps");
 /** Distinct local days ("YYYY-MM-DD") that contain items, with counts. */
 export const itemDayCounts = () => invoke<[string, number][]>("item_day_counts");
+
+// ─── Usage analytics (issue #7) ──────────────────────────────────────────────────
+
+export type UsageOverview = {
+  total_uses: number;
+  used_items: number;
+  unused_items: number;
+  active_days: number;
+  busiest_day: [string, number] | null;
+};
+/** Full-history usage snapshot for the analytics dashboard. */
+export const usageOverview = () => invoke<UsageOverview>("usage_overview");
+/** Usage events grouped by local day — powers the usage calendar/heatmap. */
+export const usageDayCounts = () => invoke<[string, number][]>("usage_day_counts");
+
+export type ItemUsage = {
+  count: number;
+  first_used: number | null;
+  last_used: number | null;
+  /** Recent usage timestamps (epoch ms), newest first. */
+  recent: number[];
+};
+/** Usage detail for one item: count, first/last use, and recent timestamps. */
+export const itemUsage = (itemId: string, recentLimit = 12) =>
+  invoke<ItemUsage>("item_usage", { itemId, recentLimit });
+/** Live items that have never been reused (the "unused" filter). */
+export const listUnused = (limit = 200) => invoke<Item[]>("list_unused", { limit });
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
 export const copyItemClean = (id: string) => invoke<void>("copy_item_clean", { id });
 /** Place arbitrary (transformed/derived) text on the system clipboard without

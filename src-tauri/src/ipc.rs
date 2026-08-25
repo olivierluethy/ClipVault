@@ -76,6 +76,32 @@ pub fn item_day_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, Str
     state.storage.item_day_counts().map_err(|e| e.to_string())
 }
 
+// ─── Usage analytics (issue #7) ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn usage_overview(state: State<AppState>) -> Result<crate::storage::UsageOverview, String> {
+    state.storage.usage_overview().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn usage_day_counts(state: State<AppState>) -> Result<Vec<(String, i64)>, String> {
+    state.storage.usage_day_counts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn item_usage(
+    state: State<AppState>,
+    item_id: String,
+    recent_limit: i64,
+) -> Result<crate::storage::ItemUsage, String> {
+    state.storage.item_usage(&item_id, recent_limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_unused(state: State<AppState>, limit: i64) -> Result<Vec<ItemDto>, String> {
+    state.storage.list_unused(limit).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn set_pinned(state: State<AppState>, id: String, pinned: bool) -> Result<(), String> {
     state.storage.set_pinned(&id, pinned).map_err(|e| e.to_string())
@@ -140,7 +166,7 @@ pub(crate) fn place_item_on_clipboard(state: &AppState, id: &str) -> Result<(), 
     let (ty, content, file_path, hash) = state.storage.get_item(id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
     // Deliberate reuse from within ClipVault → the one honest usage signal we can observe.
-    state.storage.increment_reuse(id).map_err(|e| e.to_string())?;
+    state.storage.increment_reuse(id, now_ms()).map_err(|e| e.to_string())?;
     // Suppress the echo BEFORE writing, so the watcher thread ignores our own copy-back.
     *state.last_self_copy.lock().unwrap() = Some(hash);
     // Content-based items (text/link/number/color/file) have no file and are written as
@@ -198,7 +224,7 @@ pub fn copy_snippet(state: State<AppState>, id: String) -> Result<String, String
             (ev.mime == "UTF8_STRING").then(|| String::from_utf8_lossy(&ev.bytes).into_owned())
         })
     });
-    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
+    state.storage.increment_reuse(&id, now_ms()).map_err(|e| e.to_string())?;
     write_and_mark(
         &state,
         WriteRequest { mime: "UTF8_STRING".into(), bytes: expanded.clone().into_bytes() },
@@ -240,7 +266,7 @@ pub fn copy_item_clean(state: State<AppState>, id: String) -> Result<(), String>
     let (ty, content, file_path, _hash) = state.storage.get_item(&id)
         .map_err(|e| e.to_string())?.ok_or("item not found")?;
     // Clean copy is still a deliberate reuse from within ClipVault.
-    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
+    state.storage.increment_reuse(&id, now_ms()).map_err(|e| e.to_string())?;
     let req = build_write_request(&ty, content, file_path, |s| crate::cleantext::clean_text(&s))?;
     write_and_mark(&state, req)
 }
@@ -258,7 +284,7 @@ pub fn copy_item_html(state: State<AppState>, id: String) -> Result<(), String> 
         .item_html(&id)
         .map_err(|e| e.to_string())?
         .ok_or("this entry has no formatted version")?;
-    state.storage.increment_reuse(&id).map_err(|e| e.to_string())?;
+    state.storage.increment_reuse(&id, now_ms()).map_err(|e| e.to_string())?;
     write_and_mark(&state, WriteRequest { mime: "text/html".into(), bytes: html.into_bytes() })
 }
 

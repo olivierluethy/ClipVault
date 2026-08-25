@@ -241,11 +241,17 @@ impl Storage {
     /// Record a deliberate reuse of an item from within ClipVault (Copy button / row
     /// click). Bumps only `reuse_count` — never `copy_count`, `created_at`, or
     /// `updated_at` — so the honest usage count rises without reshuffling the timeline.
-    pub fn increment_reuse(&self, id: &str) -> rusqlite::Result<()> {
+    pub fn increment_reuse(&self, id: &str, now: i64) -> rusqlite::Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE items SET reuse_count = reuse_count + 1 WHERE id = ?1",
             params![id],
+        )?;
+        // Record the timestamped usage event so analytics can answer "when" and "how
+        // often", not just a running total (issue #7).
+        conn.execute(
+            "INSERT INTO usage_events (item_id, used_at) VALUES (?1, ?2)",
+            params![id, now],
         )?;
         Ok(())
     }
@@ -762,7 +768,7 @@ mod tests {
         assert_eq!(s.frequent_count().unwrap(), 0);
 
         // Deliberate reuse bumps reuse_count only (not copy_count / timestamps).
-        s.increment_reuse(&row.id).unwrap();
+        s.increment_reuse(&row.id, 1000).unwrap();
         let row2 = s.list_items(10, None, None).unwrap()
             .into_iter().find(|i| i.id == row.id).unwrap();
         assert_eq!(row2.reuse_count, 1);
@@ -786,9 +792,9 @@ mod tests {
         s.insert_or_bump(mk("once", "h1"), 100).unwrap();
         s.insert_or_bump(mk("twice", "h2"), 200).unwrap();
         s.insert_or_bump(mk("thrice", "h3"), 300).unwrap();
-        s.increment_reuse(&id("once")).unwrap();
-        for _ in 0..2 { s.increment_reuse(&id("twice")).unwrap(); }
-        for _ in 0..3 { s.increment_reuse(&id("thrice")).unwrap(); }
+        s.increment_reuse(&id("once"), 1000).unwrap();
+        for _ in 0..2 { s.increment_reuse(&id("twice"), 1000).unwrap(); }
+        for _ in 0..3 { s.increment_reuse(&id("thrice"), 1000).unwrap(); }
 
         let rows = s.list_frequent(100).unwrap();
         assert_eq!(
@@ -800,8 +806,8 @@ mod tests {
         // Tie on reuse_count → more recently touched (updated_at) wins.
         s.insert_or_bump(mk("tie-old", "h4"), 400).unwrap();
         s.insert_or_bump(mk("tie-new", "h5"), 700).unwrap();
-        s.increment_reuse(&id("tie-old")).unwrap();
-        s.increment_reuse(&id("tie-new")).unwrap();
+        s.increment_reuse(&id("tie-old"), 1000).unwrap();
+        s.increment_reuse(&id("tie-new"), 1000).unwrap();
         let ones: Vec<String> = s.list_frequent(100).unwrap().into_iter()
             .filter(|i| i.reuse_count == 1)
             .map(|i| i.content.unwrap())

@@ -10,6 +10,7 @@ import {
   SwatchIcon,
   PhoneIcon,
   FlameIcon,
+  ActivityIcon,
   StackIcon,
   FileIcon,
   SnippetIcon,
@@ -57,6 +58,8 @@ const SYSTEM: SysFolder[] = [
   { id: "all", label: "All", Icon: LayersIcon },
   // Smart view: ranked by how often each item was copied (not a type bucket).
   { id: "frequent", label: "Frequent", Icon: FlameIcon, title: "Most frequently copied" },
+  // Smart view: usage analytics dashboard (calendar, most/never used, collections).
+  { id: "usage", label: "Usage", Icon: ActivityIcon, title: "Usage analytics" },
   // Smart view: entries that duplicate one another, grouped for cleanup.
   { id: "similar", label: "Similar", Icon: StackIcon, title: "Duplicate & near-duplicate entries" },
   { id: "text", label: "Text", Icon: TextIcon },
@@ -427,7 +430,9 @@ export function Sidebar({
               onSelect={() => pick(f.id)}
               rail={rail}
               count={
-                f.id === "frequent"
+                f.id === "usage"
+                  ? undefined
+                  : f.id === "frequent"
                   ? frequentCount
                   : f.id === "similar"
                   ? duplicateCount

@@ -13,6 +13,8 @@ mod folders;
 pub use folders::*;
 mod maintenance;
 pub use maintenance::*;
+mod usage;
+pub use usage::*;
 
 pub struct Storage {
     pub(crate) conn: Mutex<Connection>,
@@ -289,6 +291,36 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("PRAGMA user_version = 15", [])?;
         version = 15;
     }
+    if version < 16 {
+        // Timestamped usage-event log (issue #7): one row per deliberate reuse, so
+        // analytics can answer "when" and "how often", not just a running total.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS usage_events (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               item_id TEXT NOT NULL,
+               used_at INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_usage_item ON usage_events(item_id);
+             CREATE INDEX IF NOT EXISTS idx_usage_time ON usage_events(used_at);",
+        )?;
+        // Backfill from the existing aggregate reuse_count so history isn't empty: one
+        // synthetic event per prior reuse, dated to the item's last-updated time. Capped
+        // per item so a pathological count can't explode the table.
+        let rows: Vec<(String, i64, i64)> = conn
+            .prepare("SELECT id, reuse_count, updated_at FROM items WHERE reuse_count > 0")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        for (id, rc, ts) in rows {
+            for _ in 0..rc.min(100) {
+                conn.execute(
+                    "INSERT INTO usage_events (item_id, used_at) VALUES (?1, ?2)",
+                    rusqlite::params![id, ts],
+                )?;
+            }
+        }
+        conn.execute("PRAGMA user_version = 16", [])?;
+        version = 16;
+    }
     let _ = version;
     Ok(())
 }
@@ -452,7 +484,7 @@ mod tests {
             let conn = s.conn.lock().unwrap();
             let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
             // Latest schema version — bump alongside every new migration step.
-            assert_eq!(v, 15);
+            assert_eq!(v, 16);
             let cols: Vec<String> = conn
                 .prepare("SELECT name FROM pragma_table_info('items')").unwrap()
                 .query_map([], |r| r.get::<_, String>(0)).unwrap()
@@ -466,7 +498,7 @@ mod tests {
         let s2 = Storage::open(&db).unwrap();
         let v: i64 = s2.conn.lock().unwrap()
             .query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 15);
+        assert_eq!(v, 16);
     }
 
     #[test]

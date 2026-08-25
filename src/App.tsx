@@ -62,6 +62,7 @@ import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon, XIcon } from "./components/Icon";
 import Duplicates from "./components/Duplicates";
 import Snippets from "./components/Snippets";
+import Analytics from "./components/Analytics";
 import { loadTimeFormat } from "./lib/timeFormat";
 import { usePersistentBool, usePersistentNumber } from "./lib/uiPrefs";
 
@@ -114,6 +115,7 @@ export default function App() {
   const [dupCount, setDupCount] = useState(0);
   const [snipCount, setSnipCount] = useState(0);
   const [snipRefresh, setSnipRefresh] = useState(0);
+  const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
   // Bumped to make the Similar view re-scan after something outside it changed the
   // history (an undone removal, a capture).
   const [dupRefresh, setDupRefresh] = useState(0);
@@ -293,6 +295,7 @@ export default function App() {
     setFolder(f);
     if (f === "similar") setDupRefresh((n) => n + 1);
     if (f === "snippets") setSnipRefresh((n) => n + 1);
+    if (f === "usage") setAnalyticsRefresh((n) => n + 1);
   }, [clearSearch]);
 
   // Removals made inside the Similar view feed the app's standard undo toast, so a
@@ -320,6 +323,8 @@ export default function App() {
   const isDuplicatesView = folder === "similar" && !isSearching && !dateRange;
   // The Snippets library is likewise not a timeline — authored templates, not history.
   const isSnippetsView = folder === "snippets" && !isSearching && !dateRange;
+  // The Usage analytics dashboard is its own view (stats, calendar, collections).
+  const isAnalyticsView = folder === "usage" && !isSearching && !dateRange;
 
   // The Links view can group by domain instead of by date.
   const linkGrouping = folder === "link" && groupByDomain && !isSearching && !dateRange;
@@ -1022,7 +1027,15 @@ export default function App() {
           </button>
         </header>
 
-        {isSnippetsView ? (
+        {isAnalyticsView ? (
+          <Analytics
+            onChanged={() => {
+              reloadCounts();
+              reload();
+            }}
+            refreshKey={analyticsRefresh}
+          />
+        ) : isSnippetsView ? (
           <Snippets
             onChanged={() => {
               reloadSnippetCount();

@@ -104,6 +104,13 @@ export const ChevronRightIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Activity pulse — the Usage analytics view. */
+export const ActivityIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 12h4l2-7 4 14 2-7h6" />
+  </Svg>
+);
+
 /** Telephone handset — the Phone Numbers category. */
 export const PhoneIcon = (p: IconProps) => (
   <Svg {...p}>
