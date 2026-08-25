@@ -18,13 +18,11 @@ import {
   ocrAvailable,
   getSimilarityThreshold,
   setSimilarityThreshold,
-  getHotkeys,
-  setActionHotkey,
   listSourceApps,
-  HotkeyAction,
   Stats,
 } from "../api";
 import { formatTime, getTimeFormat, setTimeFormat, TimeFormat } from "../lib/timeFormat";
+import { ShortcutManager } from "./ShortcutManager";
 
 /** Presets for the Similar view's threshold. Discrete steps rather than a raw slider:
  *  the difference between 0.90 and 0.91 is not something anyone can judge, but the
@@ -114,6 +112,7 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [backupEnabled, setBackupEnabled] = useState(false);
   const [backupInterval, setBackupInterval] = useState("24");
   const [backupKeep, setBackupKeep] = useState("7");
+  // Kept only for the autostart hint's "open with <hotkey>" text.
   const [hotkey, setHotkeyState] = useState("Ctrl+Alt+V");
   const [autoPaste, setAutoPaste] = useState(false);
   const [timeFormat, setTimeFormatState] = useState<TimeFormat>(getTimeFormat());
@@ -126,8 +125,6 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [ocrEnabled, setOcrEnabled] = useState(true);
   const [ocrAvail, setOcrAvail] = useState(true);
   const [similarity, setSimilarity] = useState(0.9);
-  const [paletteHotkey, setPaletteHotkey] = useState("Ctrl+Alt+Space");
-  const [stackHotkey, setStackHotkey] = useState("Ctrl+Alt+B");
   const [minChars, setMinChars] = useState("0");
   const [maxChars, setMaxChars] = useState("0");
   const [ignorePatterns, setIgnorePatterns] = useState("");
@@ -152,9 +149,6 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setOcrEnabled((await getSettingStr("ocr_enabled")) !== "0"); // default on
       setOcrAvail(await ocrAvailable());
       setSimilarity(await getSimilarityThreshold());
-      const keys = await getHotkeys();
-      setPaletteHotkey(keys.palette);
-      setStackHotkey(keys.pasteNext);
       setMinChars(numOr(await getSettingStr("capture_min_chars"), "0"));
       setMaxChars(numOr(await getSettingStr("capture_max_chars"), "0"));
       setIgnorePatterns((await getSettingStr("capture_ignore_patterns")) ?? "");
@@ -208,28 +202,6 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       flash(`Backup failed: ${e}`);
     }
   };
-
-  /** Rebind one shortcut, optimistically. The backend verifies the binding actually
-   *  registered and rejects otherwise, so a combo the desktop has claimed reverts here
-   *  instead of silently doing nothing. */
-  const changeShortcut = async (
-    action: HotkeyAction,
-    accel: string,
-    current: string,
-    apply: (v: string) => void
-  ) => {
-    apply(accel);
-    try {
-      await setActionHotkey(action, accel);
-      flash(`Shortcut set to ${accel}.`);
-    } catch (e) {
-      apply(current);
-      flash(`${e}`);
-    }
-  };
-
-  const changeHotkey = (accel: string) =>
-    changeShortcut("open", accel, hotkey, setHotkeyState);
 
   /** Toggle one app in the capture blocklist, keeping the stored list newline-separated. */
   const toggleBlockedApp = (app: string) => {
@@ -408,99 +380,8 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
             </div>
           </Section>
 
-          <Section title="Shortcut">
-            <div className="flex flex-col gap-2 py-2">
-              <div className="flex items-center justify-between gap-4">
-                <span className="flex flex-col">
-                  <span className="text-sm text-fg">Open ClipVault hotkey</span>
-                  <span className="text-xs text-fg-muted">
-                    Global shortcut to bring up the window from anywhere.
-                  </span>
-                </span>
-                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg">
-                  {hotkey}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {["Ctrl+Alt+V", "Super+V", "Ctrl+Shift+V", "Super+Shift+V"].map((accel) => (
-                  <button
-                    key={accel}
-                    onClick={() => changeHotkey(accel)}
-                    className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
-                      hotkey === accel
-                        ? "border-accent bg-accent-dim/40 text-fg"
-                        : "border-border text-fg-muted hover:text-fg hover:border-accent"
-                    }`}
-                  >
-                    {accel}
-                  </button>
-                ))}
-              </div>
-              <span className="text-xs text-fg-muted">
-                Some combos (e.g. Super+V) may be reserved by your desktop; if one can't
-                be registered it reverts to the previous shortcut.
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-2 py-2">
-              <div className="flex items-center justify-between gap-4">
-                <span className="flex flex-col">
-                  <span className="text-sm text-fg">Quick-paste palette</span>
-                  <span className="text-xs text-fg-muted">
-                    Search and paste without opening the window.
-                  </span>
-                </span>
-                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg">
-                  {paletteHotkey}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {["Ctrl+Alt+Space", "Super+Space", "Ctrl+Shift+Space", "Alt+Space"].map((accel) => (
-                  <button
-                    key={accel}
-                    onClick={() =>
-                      changeShortcut("palette", accel, paletteHotkey, setPaletteHotkey)
-                    }
-                    className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
-                      paletteHotkey === accel
-                        ? "border-accent bg-accent-dim/40 text-fg"
-                        : "border-border text-fg-muted hover:text-fg hover:border-accent"
-                    }`}
-                  >
-                    {accel}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 py-2">
-              <div className="flex items-center justify-between gap-4">
-                <span className="flex flex-col">
-                  <span className="text-sm text-fg">Paste next in sequence</span>
-                  <span className="text-xs text-fg-muted">
-                    Walks down your recent entries, one per press.
-                  </span>
-                </span>
-                <span className="shrink-0 rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-fg">
-                  {stackHotkey}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {["Ctrl+Alt+B", "Ctrl+Shift+B", "Super+B", "Ctrl+Alt+N"].map((accel) => (
-                  <button
-                    key={accel}
-                    onClick={() => changeShortcut("pasteNext", accel, stackHotkey, setStackHotkey)}
-                    className={`rounded border px-2 py-1 font-mono text-xs transition-colors ${
-                      stackHotkey === accel
-                        ? "border-accent bg-accent-dim/40 text-fg"
-                        : "border-border text-fg-muted hover:text-fg hover:border-accent"
-                    }`}
-                  >
-                    {accel}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <Section title="Shortcuts">
+            <ShortcutManager />
           </Section>
 
           <Section title="What gets captured">

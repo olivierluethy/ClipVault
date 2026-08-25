@@ -794,6 +794,8 @@ fn action_from_str(name: &str) -> Result<crate::hotkeys::Action, String> {
         "open" => Ok(crate::hotkeys::Action::Open),
         "palette" => Ok(crate::hotkeys::Action::Palette),
         "pasteNext" | "paste_next" => Ok(crate::hotkeys::Action::PasteNext),
+        "privacy" => Ok(crate::hotkeys::Action::Privacy),
+        "quickAdd" | "quick_add" => Ok(crate::hotkeys::Action::QuickAdd),
         other => Err(format!("unknown shortcut '{other}'")),
     }
 }
@@ -812,6 +814,8 @@ pub fn get_hotkeys(state: State<AppState>) -> std::collections::HashMap<String, 
         ("open", crate::hotkeys::Action::Open),
         ("palette", crate::hotkeys::Action::Palette),
         ("pasteNext", crate::hotkeys::Action::PasteNext),
+        ("privacy", crate::hotkeys::Action::Privacy),
+        ("quickAdd", crate::hotkeys::Action::QuickAdd),
     ]
     .into_iter()
     .map(|(name, action)| (name.to_string(), crate::hotkeys::accelerator(&state.storage, action)))
@@ -835,8 +839,13 @@ pub fn set_action_hotkey(
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let action = action_from_str(&action)?;
     let hotkey = hotkey.trim().to_string();
+
+    // An empty accelerator unbinds the action (supported for the optional Privacy /
+    // Quick Add shortcuts, and as a "clear" for any). No registration to verify.
     if hotkey.is_empty() {
-        return Err("Shortcut must not be empty".to_string());
+        state.storage.set_setting(action.setting_key(), "").map_err(|e| e.to_string())?;
+        crate::hotkeys::register_all(&app, &state.storage);
+        return Ok(());
     }
 
     let previous = crate::hotkeys::accelerator(&state.storage, action);

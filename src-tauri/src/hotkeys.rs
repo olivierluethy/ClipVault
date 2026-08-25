@@ -23,6 +23,8 @@ use crate::storage::Storage;
 pub const OPEN_KEY: &str = "hotkey";
 pub const PALETTE_KEY: &str = "hotkey_palette";
 pub const STACK_KEY: &str = "hotkey_stack";
+pub const PRIVACY_KEY: &str = "hotkey_privacy";
+pub const QUICKADD_KEY: &str = "hotkey_quickadd";
 
 pub const DEFAULT_OPEN: &str = "Ctrl+Alt+V";
 pub const DEFAULT_PALETTE: &str = "Ctrl+Alt+Space";
@@ -34,6 +36,10 @@ pub enum Action {
     Open,
     Palette,
     PasteNext,
+    /// Toggle Privacy mode. Unbound by default (empty accelerator).
+    Privacy,
+    /// Capture the current clipboard now. Unbound by default.
+    QuickAdd,
 }
 
 impl Action {
@@ -42,18 +48,29 @@ impl Action {
             Action::Open => OPEN_KEY,
             Action::Palette => PALETTE_KEY,
             Action::PasteNext => STACK_KEY,
+            Action::Privacy => PRIVACY_KEY,
+            Action::QuickAdd => QUICKADD_KEY,
         }
     }
 
+    /// The default accelerator, or "" for actions that are unbound until the user
+    /// assigns one (so they never claim a key combination unexpectedly).
     pub fn default_accelerator(self) -> &'static str {
         match self {
             Action::Open => DEFAULT_OPEN,
             Action::Palette => DEFAULT_PALETTE,
             Action::PasteNext => DEFAULT_STACK,
+            Action::Privacy | Action::QuickAdd => "",
         }
     }
 
-    pub const ALL: [Action; 3] = [Action::Open, Action::Palette, Action::PasteNext];
+    pub const ALL: [Action; 5] = [
+        Action::Open,
+        Action::Palette,
+        Action::PasteNext,
+        Action::Privacy,
+        Action::QuickAdd,
+    ];
 }
 
 /// The accelerator configured for `action`, or its default.
@@ -74,6 +91,11 @@ pub fn register_all<R: tauri::Runtime>(app: &tauri::AppHandle<R>, storage: &Stor
     let _ = gs.unregister_all();
     for action in Action::ALL {
         let wanted = accelerator(storage, action);
+        // An empty accelerator means "unbound" (e.g. Privacy/QuickAdd until the user
+        // assigns one) — skip it silently rather than logging a spurious failure.
+        if wanted.trim().is_empty() {
+            continue;
+        }
         if gs.register(wanted.as_str()).is_ok() {
             continue;
         }

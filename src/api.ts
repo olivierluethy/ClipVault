@@ -226,8 +226,8 @@ export const getHotkey = () => invoke<string>("get_hotkey");
 /** Re-register + persist the global open-hotkey. Rejects if it can't be registered. */
 export const setHotkey = (hotkey: string) => invoke<void>("set_hotkey", { hotkey });
 
-/** The three global shortcuts, by action. */
-export type HotkeyAction = "open" | "palette" | "pasteNext";
+/** The global shortcuts, by action. Privacy and Quick Add are unbound by default. */
+export type HotkeyAction = "open" | "palette" | "pasteNext" | "privacy" | "quickAdd";
 export const getHotkeys = () => invoke<Record<HotkeyAction, string>>("get_hotkeys");
 /** Re-register + persist one shortcut. Rejects if it can't be registered. */
 export const setActionHotkey = (action: HotkeyAction, hotkey: string) =>

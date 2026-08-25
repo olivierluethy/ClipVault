@@ -90,6 +90,21 @@ pub fn run() {
                                 eprintln!("clipvault: stack paste failed: {e}");
                             }
                         }
+                        Some(crate::hotkeys::Action::QuickAdd) => {
+                            let _ = crate::ipc::quick_add_core(app, state.inner());
+                        }
+                        Some(crate::hotkeys::Action::Privacy) => {
+                            use std::sync::atomic::Ordering;
+                            use tauri::Emitter;
+                            let on = !state.privacy.load(Ordering::Relaxed);
+                            state.privacy.store(on, Ordering::Relaxed);
+                            let _ = state.storage.set_bool("privacy_mode", on);
+                            let pm = app.state::<crate::PrivacyMenu>();
+                            let _ = pm.0.set_checked(on);
+                            let tray = app.state::<crate::TrayState>();
+                            tray.apply(on);
+                            let _ = app.emit("privacy-changed", on);
+                        }
                         // The palette window is created on demand; both remaining actions
                         // are "show me a window", they just differ in which one.
                         Some(crate::hotkeys::Action::Palette) => {
