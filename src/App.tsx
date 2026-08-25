@@ -62,6 +62,7 @@ import { Logo } from "./components/Logo";
 import { SearchIcon, PlusIcon, SlidersIcon, MenuIcon, ShieldIcon, FlameIcon, XIcon } from "./components/Icon";
 import Duplicates from "./components/Duplicates";
 import Snippets from "./components/Snippets";
+import { loadTimeFormat } from "./lib/timeFormat";
 
 // Payload MIME for dragging clipboard items onto user folders.
 const DND_TYPE = "application/x-clipvault-items";
@@ -160,6 +161,11 @@ export default function App() {
     return () => {
       un.then((f) => f());
     };
+  }, []);
+
+  // Load the persisted clock-format preference once at startup (issue #11).
+  useEffect(() => {
+    loadTimeFormat();
   }, []);
 
   // First-run welcome: show once, then persist the "onboarded" flag.

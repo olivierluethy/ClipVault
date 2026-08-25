@@ -8,6 +8,7 @@ import {
   duplicateClusters,
 } from "../api";
 import { CheckIcon, PinIcon, ShieldIcon, StackIcon, TrashIcon } from "./Icon";
+import { formatTime, useTimeFormat } from "../lib/timeFormat";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
@@ -19,12 +20,6 @@ const TYPE_CODE: Record<Item["item_type"], string> = {
   gif: "GIF",
   file: "FILE",
 };
-
-function timeLabel(ts: number): string {
-  const d = new Date(ts);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}`;
-}
 
 function dayLabel(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -80,6 +75,7 @@ function MemberRow(props: {
 }) {
   const { member, isKeeper } = props;
   const { item } = member;
+  const timeFmt = useTimeFormat();
   return (
     <div
       className={`group relative flex items-center gap-3 rounded-md border py-2 pl-3 pr-2 transition-colors ${
@@ -102,7 +98,7 @@ function MemberRow(props: {
         {item.pinned && <PinIcon className="h-3.5 w-3.5 text-accent" />}
         {item.reuse_count > 0 && <span title="Times reused">Used {item.reuse_count}×</span>}
         <span title="Captured">
-          {dayLabel(item.created_at)} {timeLabel(item.created_at)}
+          {dayLabel(item.created_at)} {formatTime(item.created_at, timeFmt)}
         </span>
       </span>
 

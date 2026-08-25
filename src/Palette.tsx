@@ -12,6 +12,7 @@ import {
   pasteActive,
 } from "./api";
 import { SearchIcon } from "./components/Icon";
+import { formatTime, loadTimeFormat, useTimeFormat } from "./lib/timeFormat";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
@@ -27,12 +28,6 @@ const TYPE_CODE: Record<Item["item_type"], string> = {
 /** How many rows the palette holds. Deliberately small — this is a reflex, not a browser. */
 const ROWS = 8;
 
-function timeLabel(ts: number): string {
-  const d = new Date(ts);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
 /** One-line preview. Newlines are shown as a marker rather than collapsing silently, so a
  *  multi-line entry is recognisable as one. */
 function oneLine(content: string): string {
@@ -42,6 +37,7 @@ function oneLine(content: string): string {
 
 function Row(props: { item: Item; active: boolean; onPick: () => void; index: number }) {
   const { item, active } = props;
+  const timeFmt = useTimeFormat();
   const thumb = item.preview_path ?? item.file_path;
   const isImage = item.item_type === "image" || item.item_type === "gif";
   return (
@@ -77,7 +73,7 @@ function Row(props: { item: Item; active: boolean; onPick: () => void; index: nu
       )}
       {isImage && <span className="min-w-0 flex-1 truncate text-sm">Image</span>}
       <span className="shrink-0 font-mono text-[11px] text-fg-faint tnum">
-        {timeLabel(item.created_at)}
+        {formatTime(item.created_at, timeFmt)}
       </span>
     </button>
   );
@@ -107,6 +103,11 @@ export default function Palette() {
   useEffect(() => {
     loadDefault();
   }, [loadDefault]);
+
+  // The palette is its own window/module instance — load the clock-format pref here too.
+  useEffect(() => {
+    loadTimeFormat();
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), 120);

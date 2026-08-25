@@ -26,6 +26,7 @@ import {
 } from "./Icon";
 import { looksSecret } from "../lib/secret";
 import { toCssColor, detectColorFormat } from "../lib/color";
+import { formatTime, useTimeFormat } from "../lib/timeFormat";
 
 const TYPE_CODE: Record<Item["item_type"], string> = {
   text: "TXT",
@@ -45,11 +46,6 @@ function typeCodeFor(item: Item): string {
   return TYPE_CODE[item.item_type];
 }
 
-function timeLabel(ts: number): string {
-  const d = new Date(ts);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}`;
-}
 
 /** Compact "time left" until an expiry (epoch ms): "9m", "2h", "expiring…". */
 function remainingLabel(expiresAt: number): string {
@@ -365,6 +361,7 @@ export function Card(props: {
   copied?: boolean;
 }) {
   const { item, selected, multiSelected, editing } = props;
+  const timeFmt = useTimeFormat();
   const contentBased =
     item.item_type === "text" ||
     item.item_type === "link" ||
@@ -506,7 +503,7 @@ export function Card(props: {
           permanently visible so they're tappable without hover. */}
       <div className="card-actions-zone relative h-7 shrink-0">
         <div className="card-meta absolute inset-y-0 right-0 flex items-center gap-2.5 pr-1 font-mono text-[11px] text-fg-faint transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0 tnum">
-          <span title="Time captured">{timeLabel(item.created_at)}</span>
+          <span title="Time captured">{formatTime(item.created_at, timeFmt)}</span>
           {/* Copy count: how many times this exact content was *captured* off the OS
               clipboard. This is "copied", deliberately kept separate from "used" — capturing
               something never implies you reused it. Shown only when it recurred (>= 2). */}

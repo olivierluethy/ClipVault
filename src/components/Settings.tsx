@@ -24,6 +24,7 @@ import {
   HotkeyAction,
   Stats,
 } from "../api";
+import { formatTime, getTimeFormat, setTimeFormat, TimeFormat } from "../lib/timeFormat";
 
 /** Presets for the Similar view's threshold. Discrete steps rather than a raw slider:
  *  the difference between 0.90 and 0.91 is not something anyone can judge, but the
@@ -115,6 +116,13 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [backupKeep, setBackupKeep] = useState("7");
   const [hotkey, setHotkeyState] = useState("Ctrl+Alt+V");
   const [autoPaste, setAutoPaste] = useState(false);
+  const [timeFormat, setTimeFormatState] = useState<TimeFormat>(getTimeFormat());
+  // A representative afternoon time so the 12h/24h difference is always visible.
+  const [previewTs] = useState(() => {
+    const d = new Date();
+    d.setHours(14, 5, 0, 0);
+    return d.getTime();
+  });
   const [ocrEnabled, setOcrEnabled] = useState(true);
   const [ocrAvail, setOcrAvail] = useState(true);
   const [similarity, setSimilarity] = useState(0.9);
@@ -366,6 +374,38 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
                 setSettingStr("auto_paste", v ? "1" : "0");
               }}
             />
+          </Section>
+
+          <Section title="Display">
+            <div className="flex items-start justify-between gap-4 py-2">
+              <span className="flex flex-col">
+                <span className="text-sm text-fg">Time format</span>
+                <span className="text-xs text-fg-muted">
+                  How timestamps are shown across the app. Preview:{" "}
+                  <span className="font-mono text-fg">{formatTime(previewTs, timeFormat)}</span>
+                </span>
+              </span>
+              <div className="mt-0.5 flex shrink-0 overflow-hidden rounded-md border border-border">
+                {(["24h", "12h"] as TimeFormat[]).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    aria-pressed={timeFormat === fmt}
+                    onClick={() => {
+                      setTimeFormatState(fmt);
+                      setTimeFormat(fmt);
+                    }}
+                    className={`px-3 py-1 text-xs transition-colors ${
+                      timeFormat === fmt
+                        ? "bg-accent-dim text-fg"
+                        : "text-fg-muted hover:bg-bg-hover hover:text-fg"
+                    }`}
+                  >
+                    {fmt === "24h" ? "24-hour" : "12-hour"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </Section>
 
           <Section title="Shortcut">
