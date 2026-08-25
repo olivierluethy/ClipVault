@@ -9,6 +9,7 @@ mod active_window;
 mod capture;
 mod hotkeys;
 mod palette;
+mod category;
 mod snippets;
 mod stack;
 mod capture_rules;
@@ -461,6 +462,7 @@ pub fn run() {
             crate::ipc::stack_reset,
             crate::ipc::show_palette,
             crate::ipc::hide_palette,
+            crate::ipc::open_category,
             crate::ipc::ocr_available,
         ])
         .run(tauri::generate_context!())

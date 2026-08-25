@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the main window, palette, and per-category windows",
+  "windows": ["main", "palette", "category:*"],
   "permissions": [
     "core:default",
     "notification:default",

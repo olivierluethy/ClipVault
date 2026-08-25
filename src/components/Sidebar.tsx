@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderDto } from "../api";
+import { FolderDto, openCategory } from "../api";
 import { FolderCreateModal, FolderDeleteModal } from "./FolderDialogs";
 import {
   LayersIcon,
@@ -21,7 +21,11 @@ import {
   GripIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  NewWindowIcon,
 } from "./Icon";
+
+/** Library categories that can be opened in their own window (issue #5). */
+const WINDOW_CATEGORIES = new Set(["text", "link", "number", "phone", "color", "image", "file"]);
 
 /** dataTransfer MIME used when dragging a folder to reorder it (kept distinct from
  *  the clipboard-item drag type so the two gestures never collide on a folder row). */
@@ -441,6 +445,23 @@ export function Sidebar({
                   : countFor(f.id, counts)
               }
               title={f.title ?? f.label}
+              trailing={
+                WINDOW_CATEGORIES.has(f.id) ? (
+                  <div className="flex items-center pr-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openCategory(f.id);
+                      }}
+                      title={`Open ${f.label} in a new window`}
+                      aria-label={`Open ${f.label} in a new window`}
+                      className="grid h-6 w-6 place-items-center rounded text-fg-muted hover:bg-bg-hover hover:text-fg"
+                    >
+                      <NewWindowIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : undefined
+              }
             >
               <Icon className={`h-4 w-4 shrink-0 ${selected === f.id ? "text-accent" : ""}`} />
               {!rail && <span className="truncate">{f.label}</span>}

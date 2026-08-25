@@ -182,6 +182,12 @@ export const onStackAdvanced = (cb: (s: StackStep) => void) =>
 export const showPalette = () => invoke<void>("show_palette");
 export const hidePalette = () => invoke<void>("hide_palette");
 
+// ─── Per-category library windows (issue #5) ─────────────────────────────────────
+
+/** Open (or focus) a standalone window for one library category. */
+export const openCategory = (category: string) =>
+  invoke<void>("open_category", { category });
+
 // ─── Duplicates ("Similar" view) ───────────────────────────────────────────────
 
 export type DuplicateMember = {

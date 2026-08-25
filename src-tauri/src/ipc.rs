@@ -813,6 +813,12 @@ pub fn hide_palette(app: tauri::AppHandle) {
     crate::palette::hide(&app);
 }
 
+/// Open (or focus) the standalone window for a library category (issue #5).
+#[tauri::command]
+pub fn open_category(app: tauri::AppHandle, category: String) -> Result<(), String> {
+    crate::category::show(&app, &category).map_err(|e| e.to_string())
+}
+
 // ─── Global shortcuts ───────────────────────────────────────────────────────────
 
 fn action_from_str(name: &str) -> Result<crate::hotkeys::Action, String> {

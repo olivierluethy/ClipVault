@@ -104,6 +104,15 @@ export const ChevronRightIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Open-in-new-window affordance (a small window with an arrow). */
+export const NewWindowIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6" />
+    <path d="M20 4l-8 8" />
+    <path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+  </Svg>
+);
+
 /** Activity pulse — the Usage analytics view. */
 export const ActivityIcon = (p: IconProps) => (
   <Svg {...p}>
