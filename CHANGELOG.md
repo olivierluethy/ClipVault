@@ -2,6 +2,20 @@
 
 All notable changes to ClipVault are documented here.
 
+## 1.1.0
+
+Refinements to the Usage dashboard, plus a collection-building fix.
+
+### Usage dashboard
+- **Month & year labels on the heatmap**: the 6-month usage calendar now shows GitHub-style month markers along the top and the year range, so it is clear which period each column covers.
+- **Readable hover tooltip**: hovering a day shows a styled, locale-formatted date (e.g. "Mon, 25 Aug 2026 — 3 uses") instead of a raw ISO string.
+- **Click a day to inspect it**: selecting a day opens a panel listing the entries actually used that day — read-only, so viewing never inflates usage counts.
+- **Saved-entries headline**: a prominent, clickable total of saved entries that jumps straight to the full library.
+
+### Collections
+- **Select entries with checkboxes**: build a collection from a chosen subset of the most-used / never-used lists instead of all-or-nothing; "Save as collection" and "Copy" act on the selection when one exists, and fall back to the whole list otherwise.
+- **Fix**: a newly saved collection now appears in the folder list immediately and opens right away (previously it stayed hidden until another action refreshed the sidebar).
+
 ## 1.0.0
 
 The first complete release. Every tracked feature issue is implemented and closed.
