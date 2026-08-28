@@ -108,6 +108,23 @@ pub fn list_unused(state: State<AppState>, limit: i64) -> Result<Vec<ItemDto>, S
     state.storage.list_unused(limit).map_err(|e| e.to_string())
 }
 
+/// Danger-zone action: wipe every entry (history + snippets), all collections, and the
+/// whole usage history, and delete the on-disk attachments. Settings are preserved.
+/// Irreversible.
+#[tauri::command]
+pub fn clear_all_items(state: State<AppState>) -> Result<(), String> {
+    let files = state.storage.clear_all().map_err(|e| e.to_string())?;
+    for (fp, pp) in files {
+        if let Some(p) = fp {
+            let _ = std::fs::remove_file(p);
+        }
+        if let Some(p) = pp {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn set_pinned(state: State<AppState>, id: String, pinned: bool) -> Result<(), String> {
     state.storage.set_pinned(&id, pinned).map_err(|e| e.to_string())

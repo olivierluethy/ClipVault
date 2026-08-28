@@ -97,6 +97,9 @@ export const itemUsage = (itemId: string, recentLimit = 12) =>
   invoke<ItemUsage>("item_usage", { itemId, recentLimit });
 /** Live items that have never been reused (the "unused" filter). */
 export const listUnused = (limit = 200) => invoke<Item[]>("list_unused", { limit });
+/** Danger zone: delete ALL entries (history + snippets), collections, and usage history,
+ *  plus their on-disk attachments. Settings are kept. Irreversible. */
+export const clearAllItems = () => invoke<void>("clear_all_items");
 export const copyItem = (id: string) => invoke<void>("copy_item", { id });
 export const copyItemClean = (id: string) => invoke<void>("copy_item_clean", { id });
 /** Place arbitrary (transformed/derived) text on the system clipboard without

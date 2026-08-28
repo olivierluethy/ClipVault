@@ -543,6 +543,29 @@ impl Storage {
         Ok(files)
     }
 
+    /// Danger-zone "delete everything": hard-delete every item (captured history *and*
+    /// authored snippets), all folder memberships, all folders, the full-text index, and
+    /// the entire usage-event history — leaving only the `settings` table. Returns each
+    /// removed item's `(file_path, preview_path)` so the caller can delete attachments.
+    /// Irreversible: there is no soft-delete/undo for this.
+    pub fn clear_all(&self) -> rusqlite::Result<Vec<(Option<String>, Option<String>)>> {
+        let conn = self.conn.lock().unwrap();
+        let files: Vec<(Option<String>, Option<String>)> = conn
+            .prepare("SELECT file_path, preview_path FROM items")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        conn.execute_batch(
+            "BEGIN;
+             DELETE FROM usage_events;
+             DELETE FROM item_folders;
+             DELETE FROM folders;
+             DELETE FROM items_fts;
+             DELETE FROM items;
+             COMMIT;",
+        )?;
+        Ok(files)
+    }
+
     /// Typo-tolerant search: ranks live content-bearing items by Levenshtein (edit)
     /// distance against `query`, so "Gtihub" still finds "Github" even though no
     /// subsequence or prefix match exists. Scoring is done by

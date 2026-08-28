@@ -418,6 +418,7 @@ pub fn run() {
             crate::ipc::items_used_on,
             crate::ipc::item_usage,
             crate::ipc::list_unused,
+            crate::ipc::clear_all_items,
             crate::ipc::list_folders,
             crate::ipc::reorder_folders,
             crate::ipc::assign_item,

@@ -19,6 +19,7 @@ import {
   getSimilarityThreshold,
   setSimilarityThreshold,
   listSourceApps,
+  clearAllItems,
   Stats,
 } from "../api";
 import { formatTime, getTimeFormat, setTimeFormat, TimeFormat } from "../lib/timeFormat";
@@ -103,7 +104,12 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => void }) {
+export function Settings(props: {
+  onClose: () => void;
+  onPrivacyTimed?: () => void;
+  /** Called after the danger-zone "delete all" so the app can refresh every view. */
+  onDataCleared?: () => void;
+}) {
   const [excludeSecrets, setExclude] = useState(false);
   const [fetchMeta, setFetchMeta] = useState(true);
   const [autostart, setAuto] = useState(false);
@@ -132,6 +138,9 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
   const [knownApps, setKnownApps] = useState<[string, number][]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // Danger zone: two-step confirm so a full wipe can't happen on a single stray click.
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     const numOr = (v: string | null, d: string) => (v && v.trim() !== "" ? v : d);
@@ -191,6 +200,21 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
       setStats(await getStats());
     } catch (e) {
       flash(`Import failed: ${e}`);
+    }
+  };
+
+  const doClearAll = async () => {
+    setClearing(true);
+    try {
+      await clearAllItems();
+      setStats(await getStats());
+      setConfirmClear(false);
+      flash("All entries deleted.");
+      props.onDataCleared?.();
+    } catch (e) {
+      flash(`Delete failed: ${e}`);
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -578,6 +602,43 @@ export function Settings(props: { onClose: () => void; onPrivacyTimed?: () => vo
                 🔒 Database encrypted at rest (SQLCipher). The key is stored in your
                 system keyring and applied automatically at startup.
               </div>
+            </div>
+          </Section>
+
+          <Section title="Danger zone">
+            <div className="flex items-center justify-between gap-4 py-2">
+              <div className="flex flex-col">
+                <span className="text-sm text-fg">Delete all entries</span>
+                <span className="text-xs text-fg-muted">
+                  Permanently removes every entry, snippet, collection and usage record.
+                  Settings are kept. This cannot be undone.
+                </span>
+              </div>
+              {!confirmClear ? (
+                <button
+                  onClick={() => setConfirmClear(true)}
+                  className="shrink-0 rounded border border-red-500/60 px-3 py-1 text-sm text-red-300 hover:bg-red-500/10"
+                >
+                  Delete all…
+                </button>
+              ) : (
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    onClick={() => setConfirmClear(false)}
+                    disabled={clearing}
+                    className="rounded border border-border px-3 py-1 text-sm text-fg-muted hover:text-fg disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={doClearAll}
+                    disabled={clearing}
+                    className="rounded border border-red-500 bg-red-500/15 px-3 py-1 text-sm font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+                  >
+                    {clearing ? "Deleting…" : "Delete everything"}
+                  </button>
+                </div>
+              )}
             </div>
           </Section>
         </div>

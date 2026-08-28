@@ -1356,6 +1356,17 @@ export default function App() {
             setDupRefresh((n) => n + 1);
           }}
           onPrivacyTimed={() => setPriv(true)}
+          onDataCleared={() => {
+            reload();
+            reloadCounts();
+            reloadFolders();
+            reloadSnippetCount();
+            reloadDupCount();
+            setDupRefresh((n) => n + 1);
+            setAnalyticsRefresh((n) => n + 1);
+            setSnipRefresh((n) => n + 1);
+            handleSelectFolder("all");
+          }}
         />
       )}
 

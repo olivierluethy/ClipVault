@@ -12,7 +12,7 @@ use crate::storage::{NewItem, Storage};
 
 /// Verbs handled by the CLI. `main` checks this before launching the GUI.
 pub fn is_cli_verb(arg: &str) -> bool {
-    matches!(arg, "add" | "get" | "list" | "help" | "--help" | "-h")
+    matches!(arg, "add" | "get" | "list" | "clear" | "help" | "--help" | "-h")
 }
 
 fn now_ms() -> i64 {
@@ -43,6 +43,7 @@ USAGE:
   clipvault add [text...]     Add text to the history (reads stdin if no text given)
   clipvault get               Print the most recent text entry
   clipvault list [N]          Print the N most recent text entries (default 10)
+  clipvault clear             Delete ALL entries, collections and usage history
   clipvault help              Show this help
 
 Examples:
@@ -62,6 +63,7 @@ pub fn run(args: &[String]) -> i32 {
             let n = args.get(1).and_then(|s| s.parse::<i64>().ok()).unwrap_or(10);
             cmd_list(n.max(1))
         }
+        "clear" => cmd_clear(),
         _ => {
             print!("{USAGE}");
             0
@@ -107,6 +109,39 @@ fn cmd_add(rest: &[String]) -> i32 {
         }
         Err(e) => {
             eprintln!("clipvault: add failed: {e}");
+            1
+        }
+    }
+}
+
+/// Delete everything (history + snippets), all collections, and the usage history, and
+/// remove the on-disk attachments. Settings are kept. Irreversible.
+fn cmd_clear() -> i32 {
+    let storage = match open_storage() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("clipvault: {e}");
+            return 1;
+        }
+    };
+    match storage.clear_all() {
+        Ok(files) => {
+            let mut removed = 0usize;
+            for (fp, pp) in files {
+                if let Some(p) = fp {
+                    if std::fs::remove_file(&p).is_ok() {
+                        removed += 1;
+                    }
+                }
+                if let Some(p) = pp {
+                    let _ = std::fs::remove_file(&p);
+                }
+            }
+            eprintln!("clipvault: cleared all entries (removed {removed} attachment files)");
+            0
+        }
+        Err(e) => {
+            eprintln!("clipvault: clear failed: {e}");
             1
         }
     }
