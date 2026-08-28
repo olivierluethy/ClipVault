@@ -102,6 +102,33 @@ impl Storage {
             .collect::<rusqlite::Result<_>>()?;
         Ok(rows)
     }
+
+    /// Distinct, non-deleted items used at least once on a given local calendar day
+    /// ("YYYY-MM-DD"), most-recent use that day first, capped at `limit`. Powers the
+    /// heatmap's per-day detail panel. An item used several times on the day appears
+    /// once; the day's total use count comes from `usage_day_counts`, not this list.
+    pub fn items_used_on(&self, day: &str, limit: i64) -> rusqlite::Result<Vec<ItemDto>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT {ITEM_COLS} FROM items
+             WHERE deleted_at IS NULL
+               AND id IN (
+                 SELECT DISTINCT item_id FROM usage_events
+                 WHERE date(used_at / 1000, 'unixepoch', 'localtime') = ?1
+               )
+             ORDER BY (
+               SELECT MAX(used_at) FROM usage_events e
+               WHERE e.item_id = items.id
+                 AND date(e.used_at / 1000, 'unixepoch', 'localtime') = ?1
+             ) DESC
+             LIMIT ?2"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(rusqlite::params![day, limit], map_item)?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(rows)
+    }
 }
 
 #[cfg(test)]

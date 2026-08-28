@@ -81,6 +81,9 @@ export type UsageOverview = {
 export const usageOverview = () => invoke<UsageOverview>("usage_overview");
 /** Usage events grouped by local day — powers the usage calendar/heatmap. */
 export const usageDayCounts = () => invoke<[string, number][]>("usage_day_counts");
+/** Distinct items used on a given local day ("YYYY-MM-DD"), most-recent use first. */
+export const itemsUsedOn = (day: string, limit = 50) =>
+  invoke<Item[]>("items_used_on", { day, limit });
 
 export type ItemUsage = {
   count: number;

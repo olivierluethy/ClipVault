@@ -415,6 +415,7 @@ pub fn run() {
             crate::ipc::delete_folder,
             crate::ipc::usage_overview,
             crate::ipc::usage_day_counts,
+            crate::ipc::items_used_on,
             crate::ipc::item_usage,
             crate::ipc::list_unused,
             crate::ipc::list_folders,

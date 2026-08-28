@@ -97,6 +97,12 @@ pub fn item_usage(
     state.storage.item_usage(&item_id, recent_limit).map_err(|e| e.to_string())
 }
 
+/// Items used on a given local calendar day ("YYYY-MM-DD") — the heatmap day panel.
+#[tauri::command]
+pub fn items_used_on(state: State<AppState>, day: String, limit: i64) -> Result<Vec<ItemDto>, String> {
+    state.storage.items_used_on(&day, limit).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn list_unused(state: State<AppState>, limit: i64) -> Result<Vec<ItemDto>, String> {
     state.storage.list_unused(limit).map_err(|e| e.to_string())

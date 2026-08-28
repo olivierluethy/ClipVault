@@ -1032,7 +1032,10 @@ export default function App() {
             onChanged={() => {
               reloadCounts();
               reload();
+              reloadFolders();
             }}
+            onNavigateHome={() => handleSelectFolder("all")}
+            onOpenFolder={(id) => handleSelectFolder(id)}
             refreshKey={analyticsRefresh}
           />
         ) : isSnippetsView ? (
