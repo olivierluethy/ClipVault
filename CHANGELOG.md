@@ -2,6 +2,12 @@
 
 All notable changes to ClipVault are documented here.
 
+## 1.2.0
+
+### Data
+- **Delete all entries** (Settings → Danger zone): a new action that permanently removes every entry (captured history and authored snippets), all collections, and the entire usage history, along with the on-disk attachments. App settings are preserved. It is guarded by a two-step confirmation and cannot be undone.
+- **`clipvault clear`**: the same full wipe is available from the command line.
+
 ## 1.1.0
 
 Refinements to the Usage dashboard, plus a collection-building fix.
