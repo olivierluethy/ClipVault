@@ -1,4 +1,18 @@
-# ClipVault
+<div align="center">
+  <img src="public/clipvault.svg" alt="ClipVault logo" width="140" />
+  <h1>ClipVault</h1>
+  <p><b>A fast, private, local-only clipboard manager for Linux.</b><br/>Captures everything you copy, classifies it, and lets you paste any of it back — no cloud, no telemetry.</p>
+  <p>
+    <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+    <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white">
+    <img alt="Rust" src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white">
+    <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black">
+    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
+    <img alt="SQLite" src="https://img.shields.io/badge/SQLite-WAL-003B57?logo=sqlite&logoColor=white">
+  </p>
+</div>
+
+---
 
 A native-feeling, **dark-mode** clipboard manager for **Ubuntu / X11**, built with
 **Tauri v2 (Rust)** and **React + TypeScript**. It runs quietly in the system tray,
@@ -547,3 +561,12 @@ Design specs and per-phase implementation plans live in `docs/superpowers/`.
 - **Local SQLite, files-on-disk for images** — durable, fast over years of history, and
   trivially portable (Phase 3 adds one-file export/import).
 - **Dark mode only** — a deliberate single theme; no theme system in the codebase.
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Olivier Lüthy. You're free to use, modify and distribute this
+software, including commercially, as long as the copyright notice and license are included.
+
+## Author
+
+Built by **Olivier Lüthy** — [GitHub](https://github.com/olivierluethy).
